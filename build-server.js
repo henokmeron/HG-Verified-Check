@@ -99,11 +99,31 @@ Promise.all(
       let content = fs.readFileSync(outFile, 'utf8');
       
       // Fix @shared/ imports to relative paths
-      const fileDir = path.dirname(file);
-      if (fileDir.startsWith('server/')) {
-        // From server files, @shared/ -> ../../shared/
-        content = content.replace(/from\s+['"]@shared\/([^'"]+)['"]/g, "from '../../shared/$1.js'");
-        content = content.replace(/import\s*\(\s*['"]@shared\/([^'"]+)['"]\s*\)/g, "import('../../shared/$1.js')");
+      const fileDir = path.dirname(file).replace(/\\/g, '/'); // Normalize to forward slashes
+      if (fileDir.startsWith('server/') || file.startsWith('server/')) {
+        // Calculate relative path from server file to shared
+        // server/storage.ts -> ../../shared/ (from dist/server/storage.js to dist/shared/)
+        // server/auth/passport.ts -> ../../../shared/ (from dist/server/auth/passport.js to dist/shared/)
+        const depth = fileDir.split('/').length - 1; // -1 because 'server' is the base
+        // From dist/server/ to dist/shared/ = ../shared/
+        // From dist/server/auth/ to dist/shared/ = ../../shared/
+        const relativePath = '../'.repeat(depth + 1) + 'shared/';
+        
+        // Replace @shared/ imports - handle all formats with both single and double quotes
+        // import { ... } from "@shared/schema"
+        // import * as schema from "@shared/schema"
+        // import type { User } from "@shared/schema"
+        // Match: from "@shared/schema" or from '@shared/schema'
+        const beforeReplace = content;
+        content = content.replace(/from\s+["']@shared\/([^"']+)["']/g, `from '${relativePath}$1.js'`);
+        content = content.replace(/import\s*\(\s*["']@shared\/([^"']+)["']\s*\)/g, `import('${relativePath}$1.js')`);
+        // Handle require() if any
+        content = content.replace(/require\s*\(\s*["']@shared\/([^"']+)["']\s*\)/g, `require('${relativePath}$1.js')`);
+        
+        // Debug: log if replacement happened
+        if (beforeReplace !== content && beforeReplace.includes('@shared/')) {
+          console.log(`✅ Fixed @shared/ imports in ${file}`);
+        }
       }
       
       // Replace relative imports without extensions
