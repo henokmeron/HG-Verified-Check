@@ -39,11 +39,7 @@ Promise.all(
       platform: 'node',
       target: 'es2022',
       sourcemap: false,
-      bundle: false, // Don't bundle - just compile TypeScript to JavaScript
-      external: [
-        // Mark all node_modules as external
-        /^[^./]|^\.[^./]|^\.\.[^/]/
-      ]
+      bundle: false // Don't bundle - just compile TypeScript to JavaScript
     }).then(() => {
       // Post-process: Add .js extensions to relative imports
       let content = fs.readFileSync(outFile, 'utf8');
