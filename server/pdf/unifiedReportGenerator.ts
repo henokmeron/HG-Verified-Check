@@ -950,4 +950,3 @@ export async function generateUnifiedPDF(
     throw new Error('Failed to generate PDF report');
   }
 }
-}
