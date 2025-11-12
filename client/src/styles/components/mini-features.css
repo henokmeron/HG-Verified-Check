@@ -1,0 +1,72 @@
+/* Scope to the mini grid only */
+.mini-feature {
+  backdrop-filter: blur(6px);
+  transition: filter .25s ease, transform .25s ease, background-color .25s ease, box-shadow .25s ease;
+}
+.mini-feature:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 10px 28px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.08);
+}
+
+/* Icon chip: subtle tinted background with animated internal bar */
+.icon-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  width: 42px;
+  border-radius: 12px;
+  background:
+    color-mix(in oklab, var(--chip-tint, #60a5fa) 26%, rgba(255,255,255,.08));
+  overflow: hidden;
+}
+
+/* Icon glyph sits above the animation; solid white for contrast */
+.icon-glyph {
+  position: relative;
+  z-index: 2;
+  color: #fff;
+  opacity: .95;
+}
+
+/* Sliding glow bar inside the chip */
+.icon-chip::before {
+  content: "";
+  position: absolute;
+  inset: -25% -40%;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--chip-tint, #60a5fa) 80%, white 0%) 50%,
+    transparent 100%
+  );
+  filter: blur(10px);
+  z-index: 1;
+  animation: slide-x 3.0s ease-in-out infinite alternate;
+}
+
+/* Zigzag: odd cards reverse direction; all cards have staggered delays */
+.mini-feature:nth-child(odd) .icon-chip::before { animation-direction: alternate-reverse; }
+
+.mini-feature[data-seq="1"] .icon-chip::before { animation-delay: 0s; }
+.mini-feature[data-seq="2"] .icon-chip::before { animation-delay: .22s; }
+.mini-feature[data-seq="3"] .icon-chip::before { animation-delay: .44s; }
+.mini-feature[data-seq="4"] .icon-chip::before { animation-delay: .66s; }
+.mini-feature[data-seq="5"] .icon-chip::before { animation-delay: .88s; }
+.mini-feature[data-seq="6"] .icon-chip::before { animation-delay: 1.10s; }
+.mini-feature[data-seq="7"] .icon-chip::before { animation-delay: 1.32s; }
+.mini-feature[data-seq="8"] .icon-chip::before { animation-delay: 1.54s; }
+
+/* Speed up and brighten slightly on hover for a "flashy" feel without gaudy colours */
+.mini-feature:hover .icon-chip { 
+  background: color-mix(in oklab, var(--chip-tint, #60a5fa) 38%, rgba(255,255,255,.12));
+}
+.mini-feature:hover .icon-chip::before { animation-duration: 1.6s; filter: blur(8px) brightness(1.1); }
+
+/* Keyframes: left ↔ right travel inside the chip */
+@keyframes slide-x {
+  0%   { transform: translateX(-36%); }
+  100% { transform: translateX(36%); }
+}

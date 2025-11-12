@@ -1,0 +1,556 @@
+Awesome — let’s lock in a **single, dynamic report template** that shows **every field** without gaps, looks the same on web and PDF, and can **blur/hide whole sections** when they’re not in a package. Below is a complete, drop-in React/TSX template + CSS that:
+
+* Renders directly from the **VIDICheck schema JSON** (the file you attached) so **every field & label** is covered automatically — no more missing sections. &#x20;
+* Includes the DVLA/VehicleDetails, VehicleHistory (keeper/colour/plate changes), ModelDetails, DVLA Technical Details, VED/Tax, etc., as defined in the schema.  &#x20;
+* **Never shows “—” for numeric zero** (e.g., Plate Changes = **0** shows “0”).
+* Uses one **unified CSS** (for website and PDF) with print-safe rules, **no miter-corner thin borders**, **no text overlap**, no giant gaps, and **page-break protection** so sections don’t get chopped.
+* Lets you switch **mode** (`"full"` or `"free"`) and a per-package **document map** to **blur** or **hide** unavailable sections (works for both webpage and the generated PDF).
+* Keeps MOT history **outside of cards/boxes** so long lists don’t break pages.
+* Adds a compact **risk summary** row for Finance / MIAFTR / PNC / Mileage (NMR) etc. You can refine the pass/warn/fail logic later as you standardize the upstream flags.
+
+---
+
+# 1) How to use
+
+1. Save your VIDICheck schema JSON (the one you attached) as `src/schema/VIDICheck.schema.json`.
+2. Add a **sample payload** (sandbox/mock or live) to `src/mock/vidicheck.sample.json`.
+3. Drop the files below into your `src/` folder (same project that has `App.tsx`, `index.css`, etc.).
+4. In `App.tsx`, render `<VehicleReport …>` with the schema + payload.
+5. Your **PDF generator** (browser print-to-PDF, Puppeteer, wkhtmltopdf, etc.) will use the **same CSS** — no forked styles.
+
+---
+
+# 2) TypeScript: helpers, types, and renderer
+
+### `src/report/types.ts`
+
+```ts
+export type HideStrategy = 'hide' | 'blur';
+export type ReportMode = 'full' | 'free';
+
+export interface PackageDocsMap {
+  // key names should match your “Data Documents” names in your package UI
+  // e.g. "Miaftr Details", "Finance Details", "Pnc Details", etc.
+  [documentName: string]: boolean; // true if included in this package
+}
+
+export interface SchemaNode {
+  Name: string;
+  Label?: string;
+  Description?: string;
+  Type: 'String'|'Integer'|'Long'|'Decimal'|'Boolean'|'DateTime'|'Object';
+  IsList: boolean;
+  IsNullable: boolean;
+  ObjectName?: string;
+  ObjectProperties?: SchemaNode[];
+  PossibleValues?: string[];
+  EnumIntegers?: number[];
+}
+
+export interface VidicheckSchema {
+  RequestInformation: SchemaNode[];
+  ResponseInformation: SchemaNode[];
+  BillingInformation: SchemaNode[];
+  Results: {
+    [blockName: string]: SchemaNode[]; // e.g. VehicleDetails, ModelDetails, etc.
+  };
+}
+
+export interface VehicleReportProps {
+  schema: VidicheckSchema;
+  payload: any; // actual API result
+  mode: ReportMode;           // 'full' | 'free'
+  hideStrategy: HideStrategy; // 'hide' | 'blur'
+  packageDocs: PackageDocsMap;
+  brand?: { name?: string; logoUrl?: string; primary?: string; accent?: string };
+}
+```
+
+### `src/report/formatters.ts`
+
+```ts
+export const isEmpty = (v: any) =>
+  v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+
+export function formatValue(v: any, t?: string): string {
+  if (v === 0) return '0';          // IMPORTANT: show zero, not a dash
+  if (isEmpty(v)) return '—';       // only use dash for null/undefined/empty string
+  if (t === 'Boolean') return v ? 'Yes' : 'No';
+  if (t === 'DateTime') {
+    try {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) return d.toLocaleDateString();
+    } catch {}
+  }
+  return String(v);
+}
+
+// derive simple risk status from payload (tweak as you standardize flags)
+export type Risk = 'pass' | 'warn' | 'fail' | 'na';
+
+export function deriveRisk(payload: any, key: string): Risk {
+  // examples — replace with your definitive rules later
+  const data = payload?.Results || payload?.results || payload;
+  switch (key) {
+    case 'Finance': {
+      const financeHits = data?.FinanceDetails?.length || 0;
+      return financeHits > 0 ? 'fail' : 'pass';
+    }
+    case 'MIAFTR': {
+      const writeOff = data?.MiaftrDetails?.some?.((x: any)=>x?.Category) || false;
+      return writeOff ? 'fail' : 'pass';
+    }
+    case 'PNC': {
+      const pnc = data?.PncDetails?.some?.((x:any)=>x?.Flagged) || false;
+      return pnc ? 'warn' : 'pass';
+    }
+    case 'Mileage': {
+      const nmr = data?.['Mileage Check Details'] || data?.MileageCheckDetails;
+      const anomaly = Array.isArray(nmr) && nmr.some((x:any)=>x?.Anomaly);
+      return anomaly ? 'warn' : 'pass';
+    }
+    default: return 'na';
+  }
+}
+
+export function cx(...parts: Array<string|false|undefined|null>) {
+  return parts.filter(Boolean).join(' ');
+}
+```
+
+### `src/report/Visibility.tsx`
+
+```tsx
+import React from 'react';
+import { HideStrategy } from './types';
+
+export const SectionGate: React.FC<{
+  docName: string;
+  included: boolean;
+  strategy: HideStrategy;
+  children: React.ReactNode;
+}> = ({ docName, included, strategy, children }) => {
+  if (included) return <>{children}</>;
+  if (strategy === 'hide') return null;
+
+  // blur
+  return (
+    <div className="vd-blur">
+      <div className="vd-blur__overlay">Available in Full Check</div>
+      {children}
+    </div>
+  );
+};
+```
+
+### `src/report/KeyValue.tsx`
+
+```tsx
+import React from 'react';
+import { formatValue } from './formatters';
+
+export const KeyValue: React.FC<{ label: string; value: any; type?: string }> = ({label, value, type}) => {
+  return (
+    <div className="kv">
+      <div className="kv__k">{label}</div>
+      <div className="kv__v">{formatValue(value, type)}</div>
+    </div>
+  );
+};
+```
+
+### `src/report/GenericObject.tsx`
+
+```tsx
+import React from 'react';
+import { SchemaNode } from './types';
+import { KeyValue } from './KeyValue';
+
+export const GenericObject: React.FC<{
+  schema: SchemaNode[];
+  data: any;
+}> = ({ schema, data }) => {
+  if (!schema || !data) return null;
+
+  return (
+    <div className="obj-grid">
+      {schema.map((node) => {
+        const label = node.Label || node.Name;
+        const value = data?.[node.Name];
+
+        // nested object
+        if (node.Type === 'Object' && node.ObjectProperties && !node.IsList) {
+          return (
+            <div key={node.Name} className="obj-nested">
+              <div className="obj-nested__title">{label}</div>
+              <GenericObject schema={node.ObjectProperties} data={value} />
+            </div>
+          );
+        }
+
+        // list of objects
+        if (node.Type === 'Object' && node.IsList) {
+          const list = Array.isArray(value) ? value : [];
+          return (
+            <div key={node.Name} className="obj-list">
+              <div className="obj-list__title">{label}</div>
+              {list.length === 0 ? (
+                <div className="muted">—</div>
+              ) : (
+                list.map((item, idx) => (
+                  <div key={idx} className="obj-list__item">
+                    <GenericObject schema={node.ObjectProperties || []} data={item} />
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        }
+
+        // primitive
+        return <KeyValue key={node.Name} label={label} value={value} type={node.Type} />;
+      })}
+    </div>
+  );
+};
+```
+
+### `src/report/Section.tsx`
+
+```tsx
+import React from 'react';
+import { SchemaNode } from './types';
+import { GenericObject } from './GenericObject';
+
+export const Section: React.FC<{
+  title: string;
+  schema: SchemaNode[];
+  data: any;
+  id?: string;
+}> = ({ title, schema, data, id }) => {
+  // hide entire section if literally nothing to show
+  const hasAny =
+    Array.isArray(schema) &&
+    schema.some((n) => {
+      const v = data?.[n.Name];
+      return v !== null && v !== undefined && (typeof v !== 'string' || v.trim() !== '');
+    });
+
+  if (!hasAny) return null;
+
+  return (
+    <section className="section" id={id}>
+      <header className="section__header">
+        <h2>{title}</h2>
+      </header>
+      <div className="section__body">
+        <GenericObject schema={schema} data={data} />
+      </div>
+    </section>
+  );
+};
+```
+
+### `src/report/MotHistory.tsx`
+
+```tsx
+import React from 'react';
+
+export const MotHistory: React.FC<{ items: any[]|undefined }> = ({ items }) => {
+  const list = Array.isArray(items) ? items : [];
+  if (list.length === 0) return null;
+
+  return (
+    <section className="section" id="mot-history">
+      <header className="section__header"><h2>MOT History</h2></header>
+      <div className="timeline">
+        {list.map((m:any, i:number) => (
+          <div className="timeline__row" key={i}>
+            <div className="timeline__date">{m?.TestDate ? new Date(m.TestDate).toLocaleDateString() : '—'}</div>
+            <div className="timeline__body">
+              <div className="timeline__title">{m?.Result || '—'}</div>
+              <div className="timeline__meta">
+                <span>Mileage: {m?.OdometerReading ?? '—'}</span>
+                {m?.ExpiryDate && <span>Expires: {new Date(m.ExpiryDate).toLocaleDateString()}</span>}
+              </div>
+              {Array.isArray(m?.Advisories) && m.Advisories.length > 0 && (
+                <ul className="timeline__list">
+                  {m.Advisories.map((a:string, idx:number)=><li key={idx}>{a}</li>)}
+                </ul>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+```
+
+### `src/report/RiskSummary.tsx`
+
+```tsx
+import React from 'react';
+import { deriveRisk } from './formatters';
+
+const Pill: React.FC<{label:string; risk:'pass'|'warn'|'fail'|'na'}> = ({label, risk}) => (
+  <div className={`pill pill--${risk}`}><span>{label}</span></div>
+);
+
+export const RiskSummary: React.FC<{ payload:any }> = ({ payload }) => {
+  const keys = [
+    ['Finance','Finance'],
+    ['MIAFTR','MIAFTR'],
+    ['PNC','PNC'],
+    ['Mileage','Mileage']
+  ] as const;
+
+  return (
+    <section className="section section--tight" id="risk-summary">
+      <header className="section__header"><h2>Risk Summary</h2></header>
+      <div className="risk-row">
+        {keys.map(([k, label]) => <Pill key={k} label={label} risk={deriveRisk(payload, k)} />)}
+      </div>
+    </section>
+  );
+};
+```
+
+### `src/report/VehicleReport.tsx`
+
+```tsx
+import React from 'react';
+import { VehicleReportProps } from './types';
+import { SectionGate } from './Visibility';
+import { Section } from './Section';
+import { MotHistory } from './MotHistory';
+import { RiskSummary } from './RiskSummary';
+
+export const VehicleReport: React.FC<VehicleReportProps> = ({
+  schema, payload, mode, hideStrategy, packageDocs, brand
+}) => {
+  const R = schema.Results || (schema as any).results || {};
+  const P = payload?.Results || payload?.results || payload || {};
+
+  // map schema “blocks” to payload blocks by name
+  const blocks: Array<{title:string; docKey?:string; schema:any; data:any; id:string}> = [
+    { title: 'Vehicle Details',    docKey: 'Vehicle Details', schema: R.VehicleDetails, data: P.VehicleDetails, id: 'vehicle-details' },           // :contentReference[oaicite:5]{index=5}
+    { title: 'Vehicle History',    docKey: 'Vehicle Details', schema: R.VehicleHistory, data: P.VehicleHistory, id: 'vehicle-history' },           // includes Colour / Keepers / Plate changes / V5C
+    { title: 'DVLA Technical',     docKey: 'Vehicle Details', schema: R.DvlaTechnicalDetails, data: P.DvlaTechnicalDetails, id: 'dvla-technical' },
+    { title: 'Model Details',      docKey: 'Model Details',   schema: R.ModelDetails, data: P.ModelDetails, id: 'model-details' },                 // :contentReference[oaicite:6]{index=6}
+    // add other top-level blocks present in your schema file (Spec/Options, Battery, Valuation, PNC, etc.) when they appear in Results
+  ];
+
+  return (
+    <div className="report">
+      <header className="report__header">
+        {brand?.logoUrl && <img src={brand.logoUrl} alt={brand?.name || 'Brand'} className="brand" />}
+        <div className="report__title">
+          <h1>Vehicle Check Report</h1>
+          <div className="muted">
+            Package: {payload?.RequestInformation?.PackageName || '—'} • Response ID: {payload?.ResponseInformation?.ResponseId || '—'}
+          </div>
+        </div>
+      </header>
+
+      <RiskSummary payload={payload} />
+
+      {blocks.map((b) => (
+        <SectionGate
+          key={b.id}
+          docName={b.docKey || b.title}
+          included={mode === 'full' ? true : !!packageDocs[b.docKey || b.title]}
+          strategy={hideStrategy}
+        >
+          <Section id={b.id} title={b.title} schema={b.schema || []} data={b.data} />
+        </SectionGate>
+      ))}
+
+      {/* MOT history kept outside “cards” to avoid page breaks */}
+      <SectionGate
+        docName="Mot History Details"
+        included={mode === 'full' ? true : !!packageDocs['Mot History Details']}
+        strategy={hideStrategy}
+      >
+        <MotHistory items={P?.MotHistoryDetails} />
+      </SectionGate>
+
+      <footer className="report__footer">
+        <div className="muted">
+          Generated {new Date().toLocaleString()} • © {brand?.name || 'Your Company'}
+        </div>
+      </footer>
+    </div>
+  );
+};
+```
+
+---
+
+# 3) Minimal integration
+
+### Update your `App.tsx`
+
+```tsx
+import React from 'react';
+import schema from './schema/VIDICheck.schema.json';
+import payload from './mock/vidicheck.sample.json';
+import { VehicleReport } from './report/VehicleReport';
+
+export default function App() {
+  return (
+    <div className="app">
+      <VehicleReport
+        schema={schema as any}
+        payload={payload}
+        mode="free"                 // 'free' or 'full'
+        hideStrategy="blur"         // 'blur' or 'hide'
+        packageDocs={{
+          // Tick what the **free** package contains for this run.
+          'Vehicle Details': true,
+          'Model Details': true,
+          'Mot History Details': false,
+          'Finance Details': false,
+          'Miaftr Details': false,
+          'Pnc Details': false,
+          'Spec And Options Details': false,
+          'Tyre Details': false,
+          'Ukvd Valuation Details': false,
+          'Vehicle Image Details': false,
+          'Vehicle Tax Details': true,
+          'Mileage Check Details': false
+        }}
+        brand={{ name: 'CarHistoryCheck', logoUrl: '/logo.svg' }}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+# 4) Unified CSS (web + PDF)
+
+> Put this into `src/report/report.css` and import it once in your app (e.g., in `main.tsx` or `App.tsx`).
+
+```css
+:root{
+  --brand:#0b5fff;
+  --accent:#0ea5e9;
+  --ink:#0f172a;
+  --muted:#64748b;
+  --border:#e2e8f0;
+  --bg:#ffffff;
+}
+
+*{ box-sizing: border-box; }
+html,body,#root{ height:100%; background:#f7fafc; color:var(--ink); font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+
+.report{
+  max-width: 980px; margin: 24px auto; padding: 0 16px;
+}
+
+.report__header{
+  display:flex; gap:16px; align-items:center; margin-bottom:16px;
+}
+.brand{ width:56px; height:56px; object-fit:contain; }
+.report__title h1{ margin:0; font-size:22px; }
+.muted{ color:var(--muted); }
+
+.section{
+  background:var(--bg);
+  border:1px solid var(--border); /* no miter corners */
+  border-radius:12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  margin: 12px 0;
+  page-break-inside: avoid; break-inside: avoid;
+}
+.section__header{ padding:10px 14px; border-bottom:1px solid var(--border); background:#fbfdff; border-top-left-radius:12px; border-top-right-radius:12px; }
+.section__header h2{ margin:0; font-size:16px; }
+.section__body{ padding:12px 14px; }
+
+.section--tight .section__body{ padding-top:8px; padding-bottom:8px; }
+
+/* grid for fields */
+.obj-grid{
+  display:grid; grid-template-columns: repeat(12, 1fr); gap:8px 12px;
+}
+.kv{ grid-column: span 6; display:flex; gap:10px; align-items:flex-start; }
+.kv__k{ width: 45%; color:var(--muted); }
+.kv__v{ width: 55%; word-break: break-word; }
+
+/* nested object */
+.obj-nested{ grid-column: span 12; border:1px dashed var(--border); border-radius:10px; padding:8px 10px; }
+.obj-nested__title{ font-weight:600; margin-bottom:6px; }
+
+/* list of objects */
+.obj-list{ grid-column: span 12; }
+.obj-list__title{ font-weight:600; margin: 2px 0 6px; }
+.obj-list__item{ border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin-bottom:8px; }
+
+/* risk summary */
+.risk-row{ display:flex; flex-wrap: wrap; gap:8px; padding:10px 14px; }
+.pill{ padding:6px 10px; border-radius:999px; font-weight:600; border:1px solid var(--border); }
+.pill--pass{ background:#ecfdf5; border-color:#bbf7d0; }
+.pill--warn{ background:#fffbeb; border-color:#fde68a; }
+.pill--fail{ background:#fef2f2; border-color:#fecaca; }
+.pill--na{ background:#f1f5f9; }
+
+/* blur gate */
+.vd-blur{ position:relative; filter: blur(3px); }
+.vd-blur::after{ content:""; position:absolute; inset:0; }
+.vd-blur__overlay{
+  position:absolute; inset:auto 12px 12px auto;
+  background:#111827; color:#fff; font-size:12px; padding:4px 8px; border-radius:6px;
+  filter:none; z-index:2;
+}
+
+/* timeline (MOT) */
+.timeline{ padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+.timeline__row{ display:grid; grid-template-columns: 120px 1fr; gap:12px; border-bottom:1px dashed var(--border); padding-bottom:10px; }
+.timeline__date{ color:var(--muted); }
+.timeline__title{ font-weight:600; }
+.timeline__meta{ display:flex; gap:14px; color:var(--muted); margin-top:4px; }
+.timeline__list{ margin:6px 0 0 16px; }
+
+/* footer */
+.report__footer{ text-align:center; margin: 20px 0 40px; }
+
+/* PRINT */
+@media print{
+  html, body{ background:#fff; }
+  .report{ margin:0; padding:0; max-width:none; }
+  .report__header{ margin-bottom:8px; }
+  .vd-blur{ filter:none; } /* for PDFs we usually show content or replace with “Not included” before printing */
+  .vd-blur__overlay{ display:none; }
+  .section{ box-shadow:none; border-color:#dfe6ee; }
+  a[href]:after{ content:""; } /* remove link URLs in print */
+}
+```
+
+> Import it (once):
+> `import './report/report.css'`
+
+---
+
+# 5) Why this avoids the old problems
+
+* **Every field displayed**: The renderer walks the **schema nodes** (`ObjectProperties`, lists, primitives) so it can’t “forget” fields when the API adds or removes data. (Example sections in the schema: VehicleIdentification, VehicleStatus, VED rates, VehicleHistory with Colour/Keeper/Plate/V5C, and DVLA Technical details.)  &#x20;
+* **0 shows as 0**: `formatValue()` special-cases numeric zero.
+* **Consistent layout, no big gaps**: one grid, one rhythm; only top-level sections get a soft card border; nested objects are light dashed boxes; MOT timeline has no heavy box.
+* **No cutting at page ends**: `break-inside: avoid; page-break-inside: avoid;` on sections and list items.
+* **No “thin corner” miter issue**: standard border + radius + light shadow instead of tricky outlines.
+* **Web ↔ PDF parity**: one CSS with `@media print` for tweaks.
+* **Flexible package logic**: `SectionGate` blurs/hides whole sections based on `packageDocs` + `mode`. Same behavior on web and PDF.
+
+---
+
+# 6) Next steps (quick)
+
+1. Paste the files, wire `VehicleReport` in `App.tsx`, import `report.css`.
+2. Feed it your **real schema** + **real/sandbox payload**.
+3. Expand the `blocks` array to include every “Data Document” you use (Battery, Finance, PNC, Spec & Options, Tyres, Valuation, Images, Tax, Mileage, etc.) — each will auto-render via the schema when present.
+4. Replace the placeholder `deriveRisk()` with your deterministic pass/warn/fail rules once you finalize them.
+5. When you add **other providers** (DVLA, etc.), keep this same renderer: either (a) map their payload into the VIDICheck field names, or (b) load their **schema** too and let the generic renderer handle both.
+
+If you want, I can expand the `blocks` and add tiny per-document headers/icons now — just say the word and share a sample payload for each chosen document so I can verify field names.

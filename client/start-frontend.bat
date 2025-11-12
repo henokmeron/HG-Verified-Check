@@ -1,0 +1,4 @@
+@echo off
+set VITE_STRIPE_PUBLIC_KEY=pk_test_51KYcTR2QPnv2DrNS3kHs925nUQ8pZi7RmsQ79vQeIWQvh4X8Qd40rschYD8tSnw6vpy1ETYVDOFMIrjhfduByuep00o1UuUfHa
+npm run dev
+

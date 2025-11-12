@@ -1,0 +1,394 @@
+:root{
+  --brand:#0b5fff;
+  --accent:#0ea5e9;
+  --ink:#0f172a;
+  --muted:#64748b;
+  --border:#e2e8f0;
+  --bg:#ffffff;
+  --pass:#10b981;
+  --pass-bg:#ecfdf5;
+  --fail:#ef4444;
+  --fail-bg:#fef2f2;
+  --warn:#f59e0b;
+  --warn-bg:#fffbeb;
+}
+
+*{ box-sizing: border-box; }
+html,body,#root{ height:100%; background:#ffffff; color:var(--ink); font: 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+
+.report{
+  max-width: 980px; margin: 24px auto; padding: 0 16px;
+  background: #ffffff;
+}
+
+/* PDF-specific: Remove excessive boxes */
+@media print {
+  .section {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 8px 0 !important;
+    margin-bottom: 12px !important;
+  }
+  
+  .obj-nested {
+    border: none !important;
+    padding: 4px 0 !important;
+    margin: 2px 0 !important;
+  }
+  
+  .obj-list__item {
+    border: none !important;
+    padding: 4px 0 !important;
+    margin: 2px 0 !important;
+  }
+  
+  .obj-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+}
+
+/* Professional Colored Header Bar - Consistent across all reports */
+.report__header-bar{
+  background: linear-gradient(135deg, #0b5fff 0%, #0b5fffdd 100%);
+  padding: 28px 36px;
+  margin: 0 -16px 32px -16px;
+  border-radius: 0;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  page-break-after: avoid;
+  break-after: avoid;
+}
+.report__header-bar h1 {
+  font-size: 36px !important;
+  font-weight: 800 !important;
+}
+.report__header-bar .report__meta {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+}
+
+@media print {
+  .report__header-bar {
+    background: #0b5fff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    margin: 0 !important;
+    padding: 20px !important;
+  }
+}
+
+.report__header{
+  display:none; /* Hidden - using colored header bar instead */
+}
+.brand{ width:80px; height:80px; object-fit:contain; }
+.report__title h1{ margin:0; font-size:36px; font-weight:800; color:#000000; }
+.muted{ color:#1a1a1a; font-size:14px; font-weight:600; }
+
+/* Registration Number - Ensure it's not cut off on website */
+.report__registration {
+  overflow: visible !important;
+}
+.report__registration > div {
+  overflow: visible !important;
+}
+.report__registration-number {
+  overflow: visible !important;
+  line-height: 1.3 !important;
+}
+
+/* Clean line-based sections - no boxes */
+.section{
+  margin: 0 0 32px 0;
+  page-break-inside: avoid; break-inside: avoid;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.section__header{ 
+  padding: 0 0 16px 0; 
+  border-bottom: 4px solid #0b5fff; 
+  margin-bottom: 20px;
+  background: transparent;
+  position: relative;
+}
+.section__header::before {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 80px;
+  height: 4px;
+  background: #0b5fff;
+}
+.section__header h2{ 
+  margin:0; 
+  font-size:36px; 
+  font-weight:900; 
+  color:#000000;
+  text-transform: none;
+  letter-spacing: -0.02em;
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 8px;
+  text-decoration-color: #0b5fff;
+}
+.section__body{ 
+  padding:0; 
+}
+
+.section--tight .section__body{ padding:0; }
+
+/* Clean grid for fields - two columns for both website and PDF */
+.obj-grid{
+  display:grid; 
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  row-gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+@media print {
+  .obj-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    row-gap: 4px !important;
+  }
+}
+
+.kv{ 
+  display:flex; 
+  flex-direction: column;
+  gap: 2px; 
+  align-items:flex-start; 
+  padding: 4px 0;
+  border-bottom: none;
+  margin: 0;
+}
+.kv__k{ 
+  width: 100%; 
+  color:#1a1a1a; 
+  font-weight:700;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+.kv__v{ 
+  width: 100%; 
+  word-break: break-word; 
+  font-size: 15px;
+  color: #000000;
+  font-weight: 600;
+}
+
+/* Critical field color coding - colored boxes with white text (no green bar) */
+.kv--pass {
+  background: transparent !important;
+  border-left: none !important;
+  padding-left: 0 !important;
+  margin: 4px 0 !important;
+  border-radius: 0 !important;
+}
+.kv--pass .kv__v{ 
+  font-weight: 700 !important;
+  background: var(--pass) !important;
+  color: white !important;
+  padding: 4px 12px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+  margin-top: 2px !important;
+  border: none !important;
+}
+
+.kv--fail {
+  background: transparent !important;
+  border-left: none !important;
+  padding-left: 0 !important;
+  margin: 4px 0 !important;
+  border-radius: 0 !important;
+}
+.kv--fail .kv__v{ 
+  font-weight: 700 !important;
+  background: var(--fail) !important;
+  color: white !important;
+  padding: 4px 12px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+  margin-top: 2px !important;
+  border: none !important;
+}
+
+.kv--warn {
+  background: transparent !important;
+  border-left: none !important;
+  padding-left: 0 !important;
+  margin: 4px 0 !important;
+  border-radius: 0 !important;
+}
+.kv--warn .kv__v{ 
+  font-weight: 700 !important;
+  background: var(--warn) !important;
+  color: white !important;
+  padding: 4px 12px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+  margin-top: 2px !important;
+  border: none !important;
+}
+
+/* Nested objects - clean lines, no boxes, span both columns */
+.obj-nested{ 
+  grid-column: 1 / -1; 
+  border: none !important;
+  padding: 4px 0 !important; 
+  margin: 4px 0 !important;
+  background: transparent !important;
+}
+.obj-nested__title{ 
+  font-weight:800; 
+  margin-bottom:12px; 
+  font-size: 18px;
+  color: #000000;
+}
+
+/* Lists - clean lines, span both columns */
+.obj-list{ 
+  grid-column: 1 / -1; 
+  margin: 16px 0;
+}
+.obj-list__title{ 
+  font-weight:800; 
+  margin: 0 0 12px 0; 
+  font-size: 18px;
+  color: #000000;
+}
+.obj-list__item{ 
+  border: none !important;
+  padding: 4px 0 !important; 
+  margin-bottom: 4px !important;
+  background: transparent !important;
+}
+.obj-list__item:last-child{ margin-bottom: 0; }
+
+/* Risk summary - clean horizontal layout */
+.risk-row{ 
+  display:flex; 
+  flex-wrap: wrap; 
+  gap:12px; 
+  padding: 0;
+  margin: 0;
+}
+.pill{ 
+  padding:8px 16px; 
+  border-radius:6px; 
+  font-weight:600; 
+  font-size: 13px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+}
+.pill--pass{ 
+  background:var(--pass-bg); 
+  color: var(--pass);
+}
+.pill--warn{ 
+  background:var(--warn-bg); 
+  color: var(--warn);
+}
+.pill--fail{ 
+  background:var(--fail-bg); 
+  color: var(--fail);
+}
+.pill--na{ 
+  background:#f1f5f9; 
+  color: var(--muted);
+}
+
+/* blur gate */
+.vd-blur{ position:relative; filter: blur(3px); }
+.vd-blur::after{ content:""; position:absolute; inset:0; }
+.vd-blur__overlay{
+  position:absolute; inset:auto 12px 12px auto;
+  background:#111827; color:#fff; font-size:12px; padding:4px 8px; border-radius:6px;
+  filter:none; z-index:2;
+}
+
+/* timeline (MOT) - clean lines */
+.timeline{ 
+  padding:0; 
+  display:flex; 
+  flex-direction:column; 
+  gap:0; 
+}
+.timeline__row{ 
+  display:grid; 
+  grid-template-columns: 120px 1fr; 
+  gap:16px; 
+  border-bottom:1px solid #f1f5f9; 
+  padding: 16px 0;
+}
+.timeline__row:last-child{ border-bottom: none; }
+.timeline__date{ 
+  color:#1a1a1a; 
+  font-size: 14px;
+  font-weight: 700;
+}
+.timeline__title{ 
+  font-weight:800; 
+  font-size: 16px;
+  color: #000000;
+}
+.timeline__meta{ 
+  display:flex; 
+  gap:14px; 
+  color:#1a1a1a; 
+  margin-top:6px; 
+  font-size: 14px;
+  font-weight: 600;
+}
+.timeline__list{ 
+  margin:6px 0 0 16px; 
+  font-size: 14px;
+  font-weight: 600;
+  color: #000000;
+}
+
+/* footer */
+.report__footer{ 
+  text-align:center; 
+  margin: 40px 0 20px; 
+  padding-top: 24px;
+  border-top: 2px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* PRINT / PDF */
+@media print{
+  html, body{ background:#fff; }
+  .report{ margin:0; padding:0; max-width:none; }
+  .report__header{ margin-bottom:16px; padding-bottom:12px; }
+  .vd-blur{ filter:none; } /* for PDFs we usually show content or replace with "Not included" before printing */
+  .vd-blur__overlay{ display:none; }
+  .section{ 
+    box-shadow:none; 
+    border: none;
+    margin-bottom: 24px;
+  }
+  .section__header{ 
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 12px;
+  }
+  .kv{ 
+    border-bottom: 1px solid #f1f5f9;
+    page-break-inside: avoid;
+  }
+  a[href]:after{ content:""; } /* remove link URLs in print */
+  .timeline__row{ 
+    page-break-inside: avoid;
+    border-bottom: 1px solid #f1f5f9;
+  }
+}

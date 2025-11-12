@@ -1,0 +1,304 @@
+{
+  "RequestInformation": [
+    {
+      "Name": "PackageName",
+      "Label": "Package Name",
+      "Description": "The name of the package that was used to make the request.",
+      "Type": "String",
+      "IsList": false,
+      "IsNullable": false
+    },
+    {
+      "Name": "SearchTerm",
+      "Label": "Search Term",
+      "Description": "The value used to do the look up.",
+      "Type": "String",
+      "IsList": false,
+      "IsNullable": false
+    },
+    {
+      "Name": "SearchType",
+      "Label": "Search Type",
+      "Description": "Which data item that is being looked up.",
+      "Type": "String",
+      "IsList": false,
+      "IsNullable": false
+    },
+    {
+      "Name": "RequestIp",
+      "Label": "Request IP Address",
+      "Description": "The IP address where the request was made from.",
+      "Type": "String",
+      "IsList": false,
+      "IsNullable": false
+    }
+  ],
+  "ResponseInformation": [
+    {
+      "Name": "StatusCode",
+      "Label": "Status Code Number",
+      "Description": "The status of the response",
+      "Type": "Integer",
+      "IsList": false,
+      "IsNullable": false
+    },
+    {
+      "Name": "StatusMessage",
+      "Label": "Status Code Text",
+      "Description": "The status of the response as text",
+      "Type": "String",
+      "IsList": false,
+      "IsNullable": false
+    },
+    {
+      "Name": "IsSuccessStatusCode",
+      "Label": "Is Status Code Successful",
+      "Description": "This returns whether the status of the response indicates that the request was successful.",
+      "Type": "Boolean",
+      "IsList": false,
+      "IsNullable": false
+    },
+    {
+      "Name": "QueryTimeMs",
+      "Label": "Query Time",
+      "Description": "This is the amount of time the query took to execute in milliseconds",
+      "Type": "Long",
+      "IsList": false,
+      "IsNullable": false
+    },
+    {
+      "Name": "ResponseId",
+      "Label": "Response Identifier",
+      "Description": "This is the unique identifier of the report.",
+      "Type": "Guid",
+      "IsList": false,
+      "IsNullable": false
+    }
+  ],
+  "BillingInformation": [
+    {
+      "Name": "BillingTransactionId",
+      "Label": "Billing Transaction Id",
+      "Description": "This is the unique reference to the billing transaction for this lookup.",
+      "Type": "Guid",
+      "IsList": false,
+      "IsNullable": true
+    },
+    {
+      "Name": "AccountType",
+      "Label": "Account Type",
+      "Description": "This is the current type of account that defines how the account is billed.",
+      "Type": "Integer",
+      "IsList": false,
+      "IsNullable": false
+    },
+    {
+      "Name": "AccountBalance",
+      "Label": "Account Balance",
+      "Description": "The current balance of the account if this is a pay as a go account.",
+      "Type": "Decimal",
+      "IsList": false,
+      "IsNullable": true
+    },
+    {
+      "Name": "TransactionCost",
+      "Label": "Transaction Cost",
+      "Description": "The total cost of the transaction if the transaction required billing.",
+      "Type": "Decimal",
+      "IsList": false,
+      "IsNullable": true
+    }
+  ],
+  "Results": {
+    "VehicleCodes": [
+      {
+        "Name": "UkvdId",
+        "Label": "UKVD Id",
+        "Description": "UK Vehicle Data Vehicle record Id.",
+        "Type": "String",
+        "IsList": false,
+        "IsNullable": false
+      },
+      {
+        "Name": "Uvc",
+        "Label": "UVC",
+        "Description": "Universal Vehicle Code.",
+        "Type": "String",
+        "IsList": false,
+        "IsNullable": false
+      }
+    ],
+    "VehicleDetails": [
+      {
+        "Name": "VehicleIdentification",
+        "ObjectName": "VehicleIdentificationSection",
+        "Label": "Vehicle Identification",
+        "Description": "DVLA Vehicle Identification details.",
+        "Type": "Object",
+        "IsList": false,
+        "IsNullable": true,
+        "ObjectProperties": [
+          {
+            "Name": "Vrm",
+            "Label": "VRM",
+            "Description": "The Vehicle Registration Mark (VRM).",
+            "Type": "String",
+            "IsList": false,
+            "IsNullable": false
+          },
+          {
+            "Name": "Vin",
+            "Label": "VIN",
+            "Description": "The Vehicle Identification Number (VIN).",
+            "Type": "String",
+            "IsList": false,
+            "IsNullable": false
+          },
+          {
+            "Name": "VinLast5",
+            "Label": "VIN Last 5",
+            "Description": "The last 5 digits of the VIN.",
+            "Type": "String",
+            "IsList": false,
+            "IsNullable": false
+          },
+          {
+            "Name": "DvlaMake",
+            "Label": "DVLA Make",
+            "Description": "Vehicle make",
+            "Type": "String",
+            "IsList": false,
+            "IsNullable": false
+          },
+          {
+            "Name": "DvlaModel",
+            "Label": "DVLA Model",
+            "Description": "Vehicle model",
+            "Type": "String",
+            "IsList": false,
+            "IsNullable": false
+          },
+          {
+            "Name": "DateFirstRegisteredInUk",
+            "Label": "Date First Registered in UK",
+            "Description": "Date the vehicle was first registered in the UK.",
+            "Type": "DateTime",
+            "IsList": false,
+            "IsNullable": true
+          },
+          {
+            "Name": "DateFirstRegistered",
+            "Label": "Date First Registered",
+            "Description": "Date the vehicle was first registered.",
+            "Type": "DateTime",
+            "IsList": false,
+            "IsNullable": true
+          },
+          {
+            "Name": "YearOfManufacture",
+            "Label": "Year Of Manufacture",
+            "Description": "Year the vehicle was manufactured.",
+            "Type": "Integer",
+            "IsList": false,
+            "IsNullable": true
+          }
+        ]
+      }
+    ],
+    "ModelDetails": [
+      {
+        "Name": "ModelIdentification",
+        "ObjectName": "ModelIdentificationSection",
+        "Label": "Model Identification",
+        "Description": "Model identification data.",
+        "Type": "Object",
+        "IsList": false,
+        "IsNullable": true,
+        "ObjectProperties": [
+          {
+            "Name": "Make",
+            "Label": "Make",
+            "Description": "Vehicle make",
+            "Type": "String",
+            "IsList": false,
+            "IsNullable": false
+          },
+          {
+            "Name": "Range",
+            "Label": "Range",
+            "Description": "Vehicle range",
+            "Type": "String",
+            "IsList": false,
+            "IsNullable": false
+          },
+          {
+            "Name": "Model",
+            "Label": "Model",
+            "Description": "Vehicle model",
+            "Type": "String",
+            "IsList": false,
+            "IsNullable": false
+          }
+        ]
+      }
+    ],
+    "MotHistoryDetails": [
+      {
+        "Name": "Vrm",
+        "Label": "VRM",
+        "Description": "The vehicle registration mark.",
+        "Type": "String",
+        "IsList": false,
+        "IsNullable": false
+      },
+      {
+        "Name": "LatestTestDate",
+        "Label": "Latest Test Date",
+        "Description": "The date of the latest MOT test.",
+        "Type": "DateTime",
+        "IsList": false,
+        "IsNullable": true
+      },
+      {
+        "Name": "MotDueDate",
+        "Label": "MOT Due Date",
+        "Description": "Due date for the next MOT test.",
+        "Type": "DateTime",
+        "IsList": false,
+        "IsNullable": true
+      }
+    ],
+    "VehicleTaxDetails": [
+      {
+        "Name": "Vrm",
+        "Label": "VRM",
+        "Description": "The vehicle registration mark.",
+        "Type": "String",
+        "IsList": false,
+        "IsNullable": false
+      },
+      {
+        "Name": "TaxStatus",
+        "Label": "Tax Status",
+        "Description": "The vehicle's current road tax status.",
+        "Type": "String",
+        "IsList": false,
+        "IsNullable": false
+      },
+      {
+        "Name": "TaxDueDate",
+        "Label": "Tax Due Date",
+        "Description": "Date the vehicle's road tax is next due.",
+        "Type": "DateTime",
+        "IsList": false,
+        "IsNullable": true
+      }
+    ]
+  }
+}
+
+
+
+
+
+

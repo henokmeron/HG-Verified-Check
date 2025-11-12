@@ -1,0 +1,97 @@
+**Verdict:** Not fully fixed.
+
+**Problems found**
+
+* `docKey` is wrong for multiple blocks → both **Vehicle History** and **DVLA Technical** use `"Vehicle Details"` (gates/hiding will be wrong).
+* Blocks list is incomplete → missing Tax, PNC, MIAFTR, Finance, Valuation, Spec & Options, etc.
+* Template still hardcodes a short list instead of iterating all available `Results` keys → risks gaps when schema adds sections.
+
+---
+
+### Minimal fix (replace the `blocks` setup)
+
+In **`VehicleReport (1).tsx`**, replace your current `blocks: Array<...> = [...]` with this dynamic builder:
+
+```tsx
+// Map schema keys → human titles (and doc names used by packageDocs)
+const DOC_TITLES: Record<string,string> = {
+  VehicleDetails: 'Vehicle Details',
+  VehicleHistory: 'Vehicle History',
+  DvlaTechnicalDetails: 'DVLA Technical Details',
+  ModelDetails: 'Model Details',
+  VehicleTaxDetails: 'Vehicle Tax Details',
+  PncDetails: 'PNC Details',
+  MiaftrDetails: 'MIAFTR Details',
+  FinanceDetails: 'Finance Details',
+  ValuationDetails: 'Valuation Details',
+  SpecAndOptionsDetails: 'Spec & Options Details',
+  BatteryDetails: 'Battery Details',
+  TyreDetails: 'Tyre Details',
+  VehicleImageDetails: 'Vehicle Images',
+  MotHistoryDetails: 'Mot History Details',
+};
+
+const ORDER = [
+  'VehicleDetails',
+  'VehicleHistory',
+  'DvlaTechnicalDetails',
+  'ModelDetails',
+  'VehicleTaxDetails',
+  'PncDetails',
+  'MiaftrDetails',
+  'FinanceDetails',
+  'ValuationDetails',
+  'SpecAndOptionsDetails',
+  'BatteryDetails',
+  'TyreDetails',
+  'VehicleImageDetails',
+];
+
+const blocks = ORDER
+  .filter((k) => R?.[k] || P?.[k])
+  .map((k) => ({
+    title: DOC_TITLES[k] || k,
+    docKey: DOC_TITLES[k] || k,
+    schema: R?.[k],
+    data: P?.[k],
+    id: k.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase(),
+  }));
+```
+
+**Why this fixes it**
+
+* Correct `docKey` per section → `SectionGate` hides/shows accurately for each package.
+* Auto-includes all known top-level blocks → no missing sections when schema grows.
+* Keeps your existing `SectionGate`/`Section` usage unchanged.
+
+---
+
+### Keep MOT outside cards (as you intended)
+
+Leave your MOT gate as-is, but ensure the doc name matches the map:
+
+```tsx
+<SectionGate
+  docName={DOC_TITLES.MotHistoryDetails}
+  included={mode === 'full' ? true : !!packageDocs[DOC_TITLES.MotHistoryDetails]}
+  strategy={hideStrategy}
+>
+  <MotHistory items={P?.MotHistoryDetails} />
+</SectionGate>
+```
+
+---
+
+### Replit edit instructions (fast)
+
+* `Ctrl+Shift+F` → search: `blocks: Array<{title:string;`
+* Replace from the opening `[` to the closing `]` with the dynamic version above.
+* Also update the MOT gate’s `docName` to `DOC_TITLES.MotHistoryDetails` (exact).
+
+---
+
+### Note on “0 vs —”
+
+If zeros are still showing as “—”, fix it in **`Section`** (not in this file):
+
+* When rendering a value, use `value === 0 ? '0' : (value ?? '—')` (never treat `0` as falsy).

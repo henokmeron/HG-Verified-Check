@@ -1,0 +1,591 @@
+/* Clean Home Page Styles - locar.rent inspired */
+
+/* Reset all animations and effects on home page */
+#home * {
+  animation: none !important;
+  transition: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Pure white background */
+html,
+body,
+#home,
+#home section,
+#home div {
+  background: #fff !important;
+  background-image: none !important;
+}
+
+/* Remove all sliders and carousel effects */
+#home .slick-slider,
+#home .swiper,
+#home .carousel,
+#home [data-animate],
+#home [data-aos] {
+  display: none !important;
+}
+
+/* Typography - black on white */
+#home h1,
+#home h2,
+#home h3,
+#home h4,
+#home h5,
+#home h6,
+#home p,
+#home li,
+#home button,
+#home a,
+#home span,
+#home div {
+  color: #000 !important;
+  text-shadow: none !important;
+}
+
+/* Headings */
+#home h1 {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+
+#home h2 {
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 16px;
+}
+
+#home h3 {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 12px;
+}
+
+#home p {
+  font-weight: 400;
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+
+/* Clean box UI */
+#home .card,
+#home .feature,
+#home .panel,
+#home .cta {
+  background: #fff !important;
+  border: 1px solid #000 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  padding: 1.25rem !important;
+}
+
+/* Grid spacing */
+#home .grid {
+  gap: 24px !important;
+}
+
+/* Section spacing */
+#home section {
+  padding: 48px 0 !important;
+}
+
+/* Prose width */
+#home .prose {
+  max-width: 68ch;
+  margin-inline: auto;
+}
+
+/* Button Styles - Override global rules */
+#home button[class*="bg-black"],
+#home button.bg-black {
+  background: #000 !important;
+  color: #fff !important;
+  border: 2px solid #000 !important;
+}
+
+#home button[class*="bg-black"]:hover,
+#home button.bg-black:hover {
+  background: #333 !important;
+}
+
+#home button[class*="bg-white"],
+#home button[class*="border-black"] {
+  background: #fff !important;
+  color: #000 !important;
+  border: 2px solid #000 !important;
+}
+
+#home button[class*="bg-white"]:hover,
+#home button[class*="border-black"]:hover {
+  background: #f5f5f5 !important;
+}
+
+/* Primary action buttons - Premium Check */
+#home button#premiumCheckBtn {
+  background: #2563eb !important;
+  color: #fff !important;
+  border: 2px solid #2563eb !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+#home button#premiumCheckBtn:hover {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+#home button#premiumCheckBtn svg {
+  color: #fff !important;
+}
+
+/* Secondary action buttons - Free Check */
+#home button#freeCheckBtn {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+  border: 2px solid #16a34a !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+#home button#freeCheckBtn:hover {
+  background: #bbf7d0 !important;
+  border-color: #15803d !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+#home button#freeCheckBtn svg {
+  color: #166534 !important;
+}
+
+/* Pricing buttons keep black style */
+#home button[onclick*="pricing"] {
+  background: #000 !important;
+  color: #fff !important;
+  border: 2px solid #000 !important;
+}
+
+#home button[onclick*="pricing"]:hover {
+  background: #333 !important;
+}
+
+/* All button text should be visible */
+#home button span {
+  color: inherit !important;
+}
+
+/* Ensure all buttons on home page have proper styling */
+#home button {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: background 0.2s ease !important;
+}
+
+/* Default button styling if no specific class */
+#home button:not([class*="bg-"]):not([id]) {
+  background: #fff !important;
+  color: #000 !important;
+  border: 2px solid #000 !important;
+}
+
+#home button:not([class*="bg-"]):not([id]):hover {
+  background: #f5f5f5 !important;
+}
+
+/* Universal Navbar Styles - Apply to all pages */
+.home-nav,
+.nav-container {
+  position: sticky;
+  top: 0;
+  background: #fff !important;
+  border-bottom: 1px solid #000 !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+  z-index: 50;
+  border-radius: 0 !important;
+  min-height: 140px !important;
+  height: auto !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+.home-nav *,
+.nav-container * {
+  animation: none !important;
+  transition: none !important;
+  background-image: none !important;
+  mix-blend-mode: normal !important;
+}
+
+.home-nav .nav-inner,
+.nav-container .nav-inner {
+  height: 140px !important;
+  min-height: 140px !important;
+}
+
+.home-nav .nav-content,
+.nav-container .nav-content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  height: 100% !important;
+  padding: 0 16px !important;
+}
+
+.home-nav a,
+.nav-container a {
+  color: #000 !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.2px !important;
+  text-decoration: none !important;
+}
+
+.home-nav a:hover,
+.home-nav a[aria-current="page"],
+.nav-container a:hover,
+.nav-container a[aria-current="page"] {
+  text-decoration: underline !important;
+  text-underline-offset: 3px !important;
+}
+
+/* Logo and brand styling */
+.home-nav .nav-logo,
+.nav-container .nav-logo {
+  height: 120px !important;
+  width: auto !important;
+  position: relative !important;
+  z-index: 999 !important;
+  image-rendering: -webkit-optimize-contrast !important;
+  image-rendering: crisp-edges !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  transform: translateZ(0) !important;
+  -webkit-transform: translateZ(0) !important;
+  backface-visibility: hidden !important;
+  -webkit-backface-visibility: hidden !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+.home-nav .nav-brand-title,
+.nav-container .nav-brand-title {
+  font-family: 'Cambria', serif !important;
+  color: #0066cc !important;
+  font-size: 20px !important;
+  font-weight: bold !important;
+  background: none !important;
+  -webkit-text-fill-color: initial !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+.home-nav .nav-brand-subtitle,
+.nav-container .nav-brand-subtitle {
+  display: block !important;
+  color: #666 !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+  font-weight: 600 !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+.home-nav .nav-logo-glow,
+.home-nav [class*="glow"],
+.home-nav [class*="shimmer"],
+.home-nav [class*="aurora"],
+.nav-container .nav-logo-glow,
+.nav-container [class*="glow"],
+.nav-container [class*="shimmer"],
+.nav-container [class*="aurora"] {
+  display: none !important;
+}
+
+/* Clear logo wrapper styling */
+.home-nav .nav-logo-wrapper,
+.nav-container .nav-logo-wrapper {
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+/* Ensure logo link is fully visible */
+.home-nav .nav-logo-link,
+.nav-container .nav-logo-link {
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+  filter: none !important;
+}
+
+/* Brand text must be solid */
+.home-nav .nav-brand-text,
+.nav-container .nav-brand-text {
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+/* Force all navbar child elements to be fully visible */
+.home-nav div,
+.home-nav h1,
+.home-nav h2,
+.home-nav p,
+.home-nav span,
+.home-nav img,
+.nav-container div,
+.nav-container h1,
+.nav-container h2,
+.nav-container p,
+.nav-container span,
+.nav-container img {
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+/* Remove any drop-shadow classes */
+.home-nav .drop-shadow-lg,
+.home-nav .drop-shadow-2xl,
+.nav-container .drop-shadow-lg,
+.nav-container .drop-shadow-2xl {
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+
+/* Auth buttons clean style - Universal */
+.home-nav .nav-auth-button-secondary,
+.home-nav a.nav-auth-button-secondary,
+.nav-container .nav-auth-button-secondary,
+.nav-container a.nav-auth-button-secondary {
+  background: #fff !important;
+  color: #000 !important;
+  border: 2px solid #000 !important;
+  box-shadow: none !important;
+  border-radius: 6px !important;
+  padding: 8px 20px !important;
+  font-weight: 500 !important;
+  text-decoration: none !important;
+  display: inline-block !important;
+}
+
+.home-nav .nav-auth-button-primary,
+.home-nav a.nav-auth-button-primary,
+.nav-container .nav-auth-button-primary,
+.nav-container a.nav-auth-button-primary {
+  background: #000 !important;
+  color: #fff !important;
+  border: 2px solid #000 !important;
+  box-shadow: none !important;
+  border-radius: 6px !important;
+  padding: 8px 20px !important;
+  font-weight: 500 !important;
+  text-decoration: none !important;
+  display: inline-block !important;
+}
+
+.home-nav .nav-auth-button-secondary:hover,
+.home-nav a.nav-auth-button-secondary:hover,
+.nav-container .nav-auth-button-secondary:hover,
+.nav-container a.nav-auth-button-secondary:hover {
+  background: #f5f5f5 !important;
+}
+
+.home-nav .nav-auth-button-primary:hover,
+.home-nav a.nav-auth-button-primary:hover,
+.nav-container .nav-auth-button-primary:hover,
+.nav-container a.nav-auth-button-primary:hover {
+  background: #333 !important;
+}
+
+/* Fix button text colors */
+.home-nav .nav-auth-button-secondary span,
+.home-nav a.nav-auth-button-secondary span,
+.nav-container .nav-auth-button-secondary span,
+.nav-container a.nav-auth-button-secondary span {
+  color: #000 !important;
+}
+
+.home-nav .nav-auth-button-primary span,
+.home-nav a.nav-auth-button-primary span,
+.nav-container .nav-auth-button-primary span,
+.nav-container a.nav-auth-button-primary span {
+  color: #fff !important;
+}
+
+/* Remove all navbar gradient effects */
+.nav-brand-title,
+.nav-brand-subtitle {
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: unset !important;
+  background-clip: unset !important;
+}
+
+/* Remove dropdown animations */
+.home-nav .dropdown,
+.nav-container .dropdown {
+  position: static !important;
+}
+
+.home-nav .menu,
+.nav-container .menu {
+  display: block;
+  position: absolute;
+  background: #fff !important;
+  border: 1px solid #000 !important;
+}
+
+/* Desktop navigation links */
+.home-nav .nav-desktop-links a {
+  color: #000 !important;
+  font-weight: 500 !important;
+  padding: 8px 12px !important;
+  border-radius: 4px !important;
+}
+
+.home-nav .nav-desktop-links a:hover {
+  background: #f5f5f5 !important;
+  text-decoration: underline !important;
+}
+
+/* Mobile menu */
+.home-nav .nav-mobile-menu {
+  background: #fff !important;
+  border: 1px solid #000 !important;
+}
+
+.home-nav .nav-mobile-link {
+  color: #000 !important;
+  background: #fff !important;
+  border-bottom: 1px solid #eee !important;
+}
+
+.home-nav .nav-mobile-link:hover {
+  background: #f5f5f5 !important;
+}
+
+/* Remove all gradient texts */
+.home-nav .bg-gradient-to-r,
+.home-nav .bg-clip-text,
+.home-nav .text-transparent {
+  background: none !important;
+  -webkit-text-fill-color: #000 !important;
+  color: #000 !important;
+}
+
+/* Mobile toggle button */
+.home-nav .nav-mobile-toggle {
+  background: #fff !important;
+  border: 1px solid #000 !important;
+  border-radius: 4px !important;
+  padding: 8px !important;
+  width: 40px !important;
+  height: 40px !important;
+}
+
+.home-nav .nav-mobile-toggle:hover {
+  background: #f5f5f5 !important;
+}
+
+/* Icons */
+#home svg,
+.home-nav svg {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+  color: #000 !important;
+}
+
+/* Buttons */
+#home button,
+#home .btn,
+#home [role="button"] {
+  background: #fff !important;
+  color: #000 !important;
+  border: 1px solid #000 !important;
+  border-radius: 8px !important;
+  padding: 10px 20px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+}
+
+#home button:hover,
+#home .btn:hover {
+  background: #f5f5f5 !important;
+}
+
+/* Form elements */
+#home input,
+#home select,
+#home textarea {
+  background: #fff !important;
+  border: 1px solid #000 !important;
+  color: #000 !important;
+  border-radius: 4px !important;
+  padding: 8px 12px !important;
+}
+
+/* Remove all gradients and overlays */
+#home .bg-gradient-to-r,
+#home .bg-gradient-to-br,
+#home .bg-gradient-to-b,
+#home [class*="gradient"] {
+  background: #fff !important;
+}
+
+/* Remove all opacity variations */
+#home [class*="opacity-"] {
+  opacity: 1 !important;
+}
+
+/* Ensure high contrast */
+#home .text-gray-200,
+#home .text-gray-300,
+#home .text-gray-400,
+#home .text-gray-500,
+#home .text-gray-600,
+#home .text-gray-700 {
+  color: #000 !important;
+}
+
+/* Remove blur effects */
+#home [class*="blur"] {
+  filter: none !important;
+}
+
+/* Clean card styling */
+#home .microsoft-premium-card,
+#home .microsoft-card-wrapper {
+  background: #fff !important;
+  border: 1px solid #000 !important;
+  box-shadow: none !important;
+}
+
+/* Remove all absolute positioned decorative elements */
+#home .microsoft-card-glow,
+#home .microsoft-card-shimmer,
+#home .microsoft-card-aurora,
+#home .absolute.inset-0 {
+  display: none !important;
+}
+
+/* Clean form styling */
+#home form {
+  background: #fff !important;
+  padding: 24px !important;
+}
+
+/* Override motion components */
+#home [style*="transform"],
+#home [style*="opacity"] {
+  transform: none !important;
+  opacity: 1 !important;
+}
