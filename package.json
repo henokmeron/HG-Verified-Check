@@ -15,7 +15,7 @@
     "build": "cd client && npm run build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node server/index.ts",
-    "vercel-build": "npm run build && npm run build:server"
+    "vercel-build": "npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

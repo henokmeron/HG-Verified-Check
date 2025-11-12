@@ -17,7 +17,7 @@
     "noImplicitThis": false,
     "alwaysStrict": false,
     "jsx": "react",
-    "lib": ["esnext"],
+    "lib": ["esnext", "dom"],
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
@@ -27,6 +27,6 @@
     "resolveJsonModule": true,
     "allowJs": true
   },
-  "include": ["server/**/*", "shared/**/*", "client/src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "client/src/**/*.tsx"]
+  "include": ["server/**/*", "shared/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "client/**/*"]
 }
