@@ -2,8 +2,9 @@
 // This file handles all API routes for Vercel deployment
 
 import express, { type Request, Response, NextFunction } from 'express';
-import { registerRoutes } from '../server/routes.js';
-import { serveStatic } from '../server/vite.js';
+// Import from compiled files in production, or TypeScript files in development
+import { registerRoutes } from '../dist/server/routes.js';
+import { serveStatic } from '../dist/server/vite.js';
 import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';

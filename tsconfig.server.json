@@ -1,17 +1,16 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist/server",
+    "rootDir": "./server",
     "module": "ESNext",
     "target": "ES2022",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "node",
     "esModuleInterop": true,
-    "noEmit": false,
-    "outDir": "./dist",
-    "rootDir": "./server",
     "skipLibCheck": true,
-    "types": ["node"]
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["server/**/*", "shared/**/*"],
-  "exclude": ["node_modules", "client", "dist", "**/*.test.ts"]
+  "include": ["server/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
