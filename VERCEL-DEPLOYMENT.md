@@ -54,6 +54,12 @@ Before deploying, you need to set up the following environment variables in Verc
 9. **GMAIL_CLIENT_SECRET** (if using OAuth)
    - Google OAuth Client Secret
 
+10. **BASE_URL** (Required for OAuth)
+    - Your Vercel app URL
+    - Format: `https://your-app-name.vercel.app`
+    - Used for OAuth callback URLs
+    - Example: `https://hg-verified-check.vercel.app`
+
 ## Step 3: Deploy to Vercel
 
 ### Option A: Deploy via Vercel Dashboard
