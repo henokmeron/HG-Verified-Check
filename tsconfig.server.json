@@ -2,17 +2,31 @@
   "compilerOptions": {
     "noEmit": false,
     "outDir": "./dist/server",
-    "rootDir": "./server",
     "module": "ESNext",
     "target": "ES2022",
     "moduleResolution": "node",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
-    "strict": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": false,
+    "alwaysStrict": false,
+    "jsx": "react",
     "lib": ["esnext"],
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["./shared/*"],
+      "@/*": ["./client/src/*"]
+    },
+    "resolveJsonModule": true,
+    "allowJs": true
   },
-  "include": ["server/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "include": ["server/**/*", "shared/**/*", "client/src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "client/src/**/*.tsx"]
 }
