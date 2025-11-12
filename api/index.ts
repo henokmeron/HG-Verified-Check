@@ -1,9 +1,9 @@
 // Vercel serverless function entry point
 // This file handles all API routes for Vercel deployment
 
-import express from 'express';
-import { registerRoutes } from '../server/routes.js';
-import { serveStatic } from '../server/vite.js';
+import express, { type Request, Response, NextFunction } from 'express';
+import { registerRoutes } from '../server/routes';
+import { serveStatic } from '../server/vite';
 import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -33,7 +33,7 @@ app.use(session({
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   const status = err.status || err.statusCode || 500;
   const message = err.message || "Internal Server Error";
   
@@ -49,7 +49,7 @@ app.use((err, req, res, next) => {
 
 // Initialize routes and static serving
 let initialized = false;
-let initPromise = null;
+let initPromise: Promise<void> | null = null;
 
 async function initializeApp() {
   if (initialized) return;
@@ -58,7 +58,9 @@ async function initializeApp() {
   initPromise = (async () => {
     try {
       // Register all API routes
-      await registerRoutes(app);
+      // Note: registerRoutes returns an HTTP Server, but we don't need it for serverless
+      const server = await registerRoutes(app);
+      // Server is created but not used in serverless environment
       
       // Setup static file serving for production
       serveStatic(app);
