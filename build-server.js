@@ -34,35 +34,40 @@ Promise.all(
     const outFile = path.join(outDir, path.basename(file, '.ts') + '.js');
     return esbuild.build({
       entryPoints: [file],
-      bundle: true, // Bundle to resolve all imports
       format: 'esm',
       outfile: outFile,
       platform: 'node',
       target: 'es2022',
       sourcemap: false,
+      bundle: false, // Don't bundle - just compile TypeScript to JavaScript
       external: [
-        // External dependencies that should not be bundled
-        'express',
-        'express-session',
-        'passport',
-        'passport-google-oauth20',
-        'passport-local',
-        'stripe',
-        'axios',
-        'zod',
-        'nodemailer',
-        'nanoid',
-        'puppeteer',
-        'react',
-        'react-dom',
-        'react-dom/server',
-        'googleapis',
-        '@neondatabase/serverless',
-        'fs',
-        'path',
-        'http',
-        'url'
+        // Mark all node_modules as external
+        /^[^./]|^\.[^./]|^\.\.[^/]/
       ]
+    }).then(() => {
+      // Post-process: Add .js extensions to relative imports
+      let content = fs.readFileSync(outFile, 'utf8');
+      // Replace relative imports without extensions
+      content = content.replace(
+        /from\s+['"](\.\.?\/[^'"]*?)(?<!\.js)['"]/g,
+        (match, importPath) => {
+          // Skip if it's a directory import (ends with /)
+          if (importPath.endsWith('/')) return match;
+          // Skip if already has extension
+          if (importPath.match(/\.(js|json|node)$/)) return match;
+          return match.replace(importPath, importPath + '.js');
+        }
+      );
+      // Also handle import() statements
+      content = content.replace(
+        /import\s*\(\s*['"](\.\.?\/[^'"]*?)(?<!\.js)['"]\s*\)/g,
+        (match, importPath) => {
+          if (importPath.endsWith('/')) return match;
+          if (importPath.match(/\.(js|json|node)$/)) return match;
+          return match.replace(importPath, importPath + '.js');
+        }
+      );
+      fs.writeFileSync(outFile, content, 'utf8');
     });
   })
 )
