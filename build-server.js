@@ -18,7 +18,14 @@ const serverFiles = [
   'server/auth/middleware.ts',
   'server/pdf/unifiedReportGenerator.ts',
   'server/services/EmailService.ts',
-  'server/services/OAuthEmailService.ts'
+  'server/services/OAuthEmailService.ts',
+  'server/mockData/generateComprehensiveMockData.ts',
+  'server/branding/brandLogos.ts',
+  'server/config/features.ts',
+  'server/reporting/brand.ts',
+  'server/reporting/format.ts',
+  'server/reportSchema/helpers.ts',
+  'server/email/gmailService.ts'
 ];
 
 const outDir = 'dist/server';
@@ -28,10 +35,19 @@ if (!fs.existsSync(outDir)) {
   fs.mkdirSync(outDir, { recursive: true });
 }
 
-// Build each file
+// Build each file, preserving directory structure
 Promise.all(
   serverFiles.map(file => {
-    const outFile = path.join(outDir, path.basename(file, '.ts') + '.js');
+    // Preserve directory structure: server/auth/middleware.ts -> dist/server/auth/middleware.js
+    const relativePath = file.replace(/^server\//, '');
+    const outFile = path.join(outDir, relativePath.replace(/\.ts$/, '.js'));
+    
+    // Ensure output directory exists
+    const outDirForFile = path.dirname(outFile);
+    if (!fs.existsSync(outDirForFile)) {
+      fs.mkdirSync(outDirForFile, { recursive: true });
+    }
+    
     return esbuild.build({
       entryPoints: [file],
       format: 'esm',
