@@ -13,9 +13,9 @@
     "kill-ports": "taskkill /F /IM node.exe /T || true",
     "debug-start": "npm run kill-ports && concurrently \"node start-server.js --port 8000\" \"cd client && npm run dev -- --port 8000\"",
     "build": "cd client && npm run build",
-    "build:server": "tsc -p tsconfig.server.json",
+    "build:server": "node -e \"require('esbuild').build({ entryPoints: ['server/routes.ts', 'server/vite.ts', 'server/storage.ts', 'server/db.ts', 'server/auth/index.ts', 'server/auth/passport.ts', 'server/auth/routes.ts', 'server/auth/middleware.ts', 'server/pdf/unifiedReportGenerator.ts', 'server/services/EmailService.ts', 'server/services/OAuthEmailService.ts'], bundle: false, format: 'esm', outdir: 'dist/server', platform: 'node', target: 'es2022', sourcemap: false }).catch(() => process.exit(1))\"",
     "start": "node server/index.ts",
-    "vercel-build": "npm run build"
+    "vercel-build": "npm run build && npm run build:server"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
