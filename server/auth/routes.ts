@@ -24,8 +24,12 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
       (req.session as any).returnTo = req.query.redirect as string;
     }
     
-    // For local development without REPL_ID, show a simple login page
-    if (!process.env.REPL_ID) {
+    // Check if we're in production (Vercel) or local dev
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+    const isLocalDev = !isProduction && !process.env.REPL_ID;
+    
+    // For local development, show a simple login page
+    if (isLocalDev) {
       return res.send(`
         <!DOCTYPE html>
         <html>
@@ -213,7 +217,11 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
 
   // Simple login endpoint for local development
   app.post("/api/auth/login", (req, res) => {
-    if (!process.env.REPL_ID) {
+    // Check if we're in production (Vercel) or local dev
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+    const isLocalDev = !isProduction && !process.env.REPL_ID;
+    
+    if (isLocalDev) {
       console.log('🔐 Local dev login attempt...');
       
       // Set session flag to indicate user has logged in

@@ -9,6 +9,7 @@ import { serveStatic } from '../dist/server/vite.js';
 import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import passport from 'passport';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,17 +20,28 @@ const app = express();
 app.use(express.json({ limit: "30mb" }));
 app.use(express.urlencoded({ limit: "30mb", extended: true }));
 
+// Trust proxy for Vercel (important for sessions and redirects)
+app.set('trust proxy', 1);
+
 // Session middleware - use memory store for serverless
+// Note: In serverless, sessions are ephemeral and may not persist across function invocations
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-session-secret-change-in-production',
-  resave: false,
-  saveUninitialized: false,
+  resave: true, // Set to true for better session persistence in serverless
+  saveUninitialized: true, // Set to true to ensure session is created
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
     httpOnly: true,
+    sameSite: 'lax', // Help with cross-site requests
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
+
+// Initialize Passport (must be after session middleware)
+// Note: configurePassport is called inside registerRoutes via setupAuth
+// But we need to initialize Passport here for the serverless function
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));

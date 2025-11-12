@@ -1078,8 +1078,12 @@ async function vehicleDataLookup(registration: string) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', async (req: any, res) => {
-    // For local development without REPL_ID, require explicit login
-    if (!process.env.REPL_ID) {
+    // Check if we're in production (Vercel) or local dev
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+    const isLocalDev = !isProduction && !process.env.REPL_ID;
+    
+    // For local development, require explicit login
+    if (isLocalDev) {
       // Check if user has explicitly logged in via the login page
       if (!req.session?.userLoggedIn) {
         return res.status(401).json({ 

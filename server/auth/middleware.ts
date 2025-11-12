@@ -1,9 +1,15 @@
 import type { Request, Response, NextFunction } from "express";
 
 export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
-  // Check both Passport authentication and local dev session
-  const isLocalDevAuth = !process.env.REPL_ID && (req.session as any)?.userLoggedIn;
-  const isPassportAuth = process.env.REPL_ID && (req as any).isAuthenticated && (req as any).isAuthenticated();
+  // Check if we're in production (Vercel) or local dev
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+  const isLocalDev = !isProduction && !process.env.REPL_ID;
+  
+  // Check Passport authentication (for production OAuth)
+  const isPassportAuth = (req as any).isAuthenticated && (req as any).isAuthenticated();
+  
+  // Check local dev session (only for local development)
+  const isLocalDevAuth = isLocalDev && (req.session as any)?.userLoggedIn;
   
   if (isPassportAuth || isLocalDevAuth) {
     // If in local dev mode and no req.user exists, create a mock user
@@ -22,9 +28,15 @@ export function isAuthenticated(req: Request, res: Response, next: NextFunction)
 }
 
 export function isAdmin(req: Request, res: Response, next: NextFunction) {
-  // Check both Passport authentication and local dev session
-  const isLocalDevAuth = !process.env.REPL_ID && (req.session as any)?.userLoggedIn;
-  const isPassportAuth = process.env.REPL_ID && (req as any).isAuthenticated && (req as any).isAuthenticated();
+  // Check if we're in production (Vercel) or local dev
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+  const isLocalDev = !isProduction && !process.env.REPL_ID;
+  
+  // Check Passport authentication (for production OAuth)
+  const isPassportAuth = (req as any).isAuthenticated && (req as any).isAuthenticated();
+  
+  // Check local dev session (only for local development)
+  const isLocalDevAuth = isLocalDev && (req.session as any)?.userLoggedIn;
   
   if (!isPassportAuth && !isLocalDevAuth) {
     return res.status(401).json({ message: "Authentication required" });
