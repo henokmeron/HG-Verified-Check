@@ -8,7 +8,7 @@ import '@/report/report.css';
 import schemaData from '@/data/vidcheck-package-schema.json';
 
 // Import logo as a module to ensure it loads correctly
-import logoImage from '@assets/logo square perfect_1757451903301.png';
+import logoImage from '@/assets/logo square perfect_1757451903301.png';
 
 interface UnifiedReportDisplayProps {
   vehicleData: any;

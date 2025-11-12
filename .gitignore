@@ -24,3 +24,15 @@ update-api-keys.js
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Generated reports and user data
+reports/
+*.pdf
+!attached_assets/*.pdf
+
+# Old assets and development files
+attached_assets/
+test-*.pdf
+
+# Vercel
+.vercel

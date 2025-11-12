@@ -91,9 +91,9 @@ export async function generateUnifiedPDF(
     let logoUrl = '';
     const logoPaths = [
       path.join(process.cwd(), 'public', 'logo.png'),
-      path.join(process.cwd(), 'attached_assets', 'logo square perfect_1757451903301.png'),
-      path.join(process.cwd(), 'attached_assets', 'logo square.png'),
-      path.join(process.cwd(), 'attached_assets', 'Circle logo.png'),
+      path.join(process.cwd(), 'client', 'src', 'assets', 'logo square perfect_1757451903301.png'),
+      path.join(process.cwd(), 'public', 'logo square perfect_1757451903301.png'),
+      path.join(process.cwd(), 'public', 'Circle logo.png'),
     ];
     
     for (const logoPath of logoPaths) {

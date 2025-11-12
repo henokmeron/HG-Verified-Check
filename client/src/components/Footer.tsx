@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { Shield, Mail, FileText, HelpCircle, Info, Home, ChevronRight } from "lucide-react";
 
-import LOGOO from "@assets/Circle logo.png";
+import LOGOO from "@/assets/Circle logo.png";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();

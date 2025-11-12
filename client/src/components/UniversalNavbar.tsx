@@ -10,7 +10,7 @@ import { MARKETING_NAV_ITEMS, APP_NAV_ITEMS, ADMIN_ACCESS_ITEM } from "@/config/
 // Import the navbar styles
 import "@/styles/navbar.css";
 
-import CarCheckLogo from "@assets/logo square perfect_1757451903301.png";
+import CarCheckLogo from "@/assets/logo square perfect_1757451903301.png";
 
 interface UniversalNavbarProps {
   variant?: 'marketing' | 'app' | 'admin';
