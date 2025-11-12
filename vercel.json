@@ -23,7 +23,7 @@
     "api/index.ts": {
       "maxDuration": 60,
       "memory": 3008,
-      "includeFiles": "dist/server/**"
+      "includeFiles": "dist/**"
     }
   },
   "env": {
