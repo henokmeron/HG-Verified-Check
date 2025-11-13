@@ -17,7 +17,7 @@ const loginSchema = z.object({
 });
 
 export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl: string) {
-  // Simple login page for local development
+  // Login page - ALWAYS use Google OAuth in production
   app.get("/api/login", (req, res) => {
     // Store the redirect URL in the session
     if (req.query.redirect) {
@@ -30,86 +30,49 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
                         process.env.VERCEL === '1' || 
                         process.env.VERCEL_ENV === 'production' ||
                         process.env.VERCEL_URL;
-    const isLocalDev = !isProduction && !process.env.REPL_ID;
     
-    // For local development, show a simple login page
-    if (isLocalDev) {
-      return res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>AutoCheckPro - Sign In</title>
-          <style>
-            body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
-            .container { max-width: 400px; margin: 100px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-            h1 { text-align: center; color: #333; margin-bottom: 30px; }
-            .btn { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
-            .btn:hover { background: #0056b3; }
-            .btn:disabled { background: #ccc; cursor: not-allowed; }
-            .info { background: #e7f3ff; padding: 15px; border-radius: 4px; margin-bottom: 20px; color: #0066cc; }
-            .spinner { display: none; margin: 10px auto; border: 3px solid #f3f3f3; border-top: 3px solid #007bff; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>Sign In</h1>
-            <div class="info">
-              <strong>Local Development Mode</strong><br>
-              Authentication is simplified for local testing. Click below to access the application.
-            </div>
-            <button class="btn" id="loginBtn" onclick="login()">
-              Sign In
-            </button>
-            <div class="spinner" id="spinner"></div>
-            <script>
-              async function login() {
-                const btn = document.getElementById('loginBtn');
-                const spinner = document.getElementById('spinner');
-                btn.disabled = true;
-                btn.textContent = 'Signing in...';
-                spinner.style.display = 'block';
-                
-                try {
-                  const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include'
-                  });
-                  
-                  if (response.ok) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    window.location.href = '${req.query.redirect || '/app'}';
-                  } else {
-                    const data = await response.json();
-                    alert('Login failed: ' + (data.message || 'Please try again'));
-                    btn.disabled = false;
-                    btn.textContent = 'Sign In';
-                    spinner.style.display = 'none';
-                  }
-                } catch (error) {
-                  console.error('Login error:', error);
-                  alert('Login failed. Please check the console and try again.');
-                  btn.disabled = false;
-                  btn.textContent = 'Sign In';
-                  spinner.style.display = 'none';
-                }
-              }
-            </script>
-          </div>
-        </body>
-        </html>
-      `);
-    }
+    console.log('🔍 Login page check:', {
+      isProduction,
+      hasGmailClientId: !!process.env.GMAIL_CLIENT_ID,
+      hasGmailClientSecret: !!process.env.GMAIL_CLIENT_SECRET,
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
+        VERCEL_URL: process.env.VERCEL_URL
+      }
+    });
     
-    // For production, redirect to Google OAuth (only if configured)
+    // ALWAYS redirect to Google OAuth if credentials are configured (production or local)
     if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
+      console.log('✅ Redirecting to Google OAuth');
       res.redirect("/auth/google");
-    } else {
-      res.status(503).json({ 
-        message: "Google OAuth not configured. Please configure GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET environment variables." 
-      });
+      return;
     }
+    
+    // If OAuth not configured, show error page
+    res.status(503).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>AutoCheckPro - Sign In</title>
+        <style>
+          body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+          .container { max-width: 500px; margin: 100px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+          h1 { text-align: center; color: #333; margin-bottom: 30px; }
+          .error { background: #fee; padding: 15px; border-radius: 4px; margin-bottom: 20px; color: #c33; border: 1px solid #fcc; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Sign In</h1>
+          <div class="error">
+            <strong>Configuration Error</strong><br>
+            Google OAuth is not configured. Please configure GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET environment variables.
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
   });
 
   // Google OAuth routes - ONLY register if credentials are configured
@@ -225,46 +188,17 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
   //   })(req, res, next);
   // });
 
-  // Simple login endpoint for local development
+  // Login endpoint - ALWAYS redirect to Google OAuth
   app.post("/api/auth/login", (req, res) => {
-    // Check if we're in production (Vercel) or local dev
-    // Vercel sets: VERCEL=1, NODE_ENV=production, VERCEL_ENV=production
-    const isProduction = process.env.NODE_ENV === 'production' || 
-                        process.env.VERCEL === '1' || 
-                        process.env.VERCEL_ENV === 'production' ||
-                        process.env.VERCEL_URL;
-    const isLocalDev = !isProduction && !process.env.REPL_ID;
+    console.log('🔍 POST /api/auth/login called');
     
-    if (isLocalDev) {
-      console.log('🔐 Local dev login attempt...');
-      
-      // Set session flag to indicate user has logged in
-      (req.session as any).userLoggedIn = true;
-      
-      // Explicitly save the session before responding
-      req.session.save((err) => {
-        if (err) {
-          console.error('❌ Session save error:', err);
-          return res.status(500).json({
-            success: false,
-            message: "Failed to save session"
-          });
-        }
-        
-        console.log('✅ Session saved successfully');
-        return res.json({
-          success: true,
-          message: "Logged in successfully"
-        });
-      });
-      return; // Important: prevent further execution
-    }
-    
-    // For production, redirect to proper OAuth (only if configured)
+    // ALWAYS redirect to Google OAuth if configured
     if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
+      console.log('✅ Redirecting to Google OAuth');
       res.redirect("/auth/google");
     } else {
-      res.status(500).json({ 
+      console.error('❌ Google OAuth not configured');
+      res.status(503).json({ 
         message: "Google OAuth not configured. Please configure GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET environment variables." 
       });
     }
