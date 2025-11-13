@@ -41,8 +41,16 @@ app.use(session({
   }
 }));
 
-// Add session debugging middleware
+// Add request debugging middleware - log ALL requests to see what's happening
 app.use((req: any, res: Response, next: NextFunction) => {
+  console.log('🌐 Request received:', {
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    url: req.url,
+    query: req.query
+  });
+  
   if (req.path === '/api/auth/user' || req.path.startsWith('/auth/')) {
     console.log('🔍 Session debug:', {
       path: req.path,
@@ -89,17 +97,51 @@ async function initializeApp() {
   
   initPromise = (async () => {
     try {
+      console.log('🚀 Initializing app routes...');
+      
       // Register all API routes
       // Note: registerRoutes returns an HTTP Server, but we don't need it for serverless
       await registerRoutes(app);
       // Server is created but not used in serverless environment
       
+      // Log registered routes for debugging
+      console.log('✅ Routes registered. Checking for /auth/google route...');
+      const routes: string[] = [];
+      app._router?.stack?.forEach((middleware: any) => {
+        if (middleware.route) {
+          routes.push(`${Object.keys(middleware.route.methods).join(',').toUpperCase()} ${middleware.route.path}`);
+        } else if (middleware.name === 'router') {
+          middleware.handle.stack?.forEach((handler: any) => {
+            if (handler.route) {
+              routes.push(`${Object.keys(handler.route.methods).join(',').toUpperCase()} ${handler.route.path}`);
+            }
+          });
+        }
+      });
+      console.log('📋 Registered routes:', routes.filter(r => r.includes('auth') || r.includes('google')).join(', ') || 'No auth routes found');
+      
       // Setup static file serving for production
       serveStatic(app);
       
+      // Add a catch-all 404 handler AFTER all routes to debug
+      app.use((req: any, res: Response) => {
+        console.log('❌ 404 - No route matched:', {
+          method: req.method,
+          path: req.path,
+          originalUrl: req.originalUrl,
+          url: req.url
+        });
+        res.status(404).json({ 
+          message: `Cannot ${req.method} ${req.path}`,
+          path: req.path,
+          originalUrl: req.originalUrl
+        });
+      });
+      
       initialized = true;
+      console.log('✅ App initialization complete');
     } catch (error) {
-      console.error('Failed to initialize app:', error);
+      console.error('❌ Failed to initialize app:', error);
       throw error;
     }
   })();
