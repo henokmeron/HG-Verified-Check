@@ -1077,6 +1077,37 @@ async function vehicleDataLookup(registration: string) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Diagnostic endpoint to check environment and configuration
+  app.get('/api/debug/auth', (req: any, res) => {
+    res.json({
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
+        VERCEL_URL: process.env.VERCEL_URL,
+        VERCEL_ENV: process.env.VERCEL_ENV,
+      },
+      oauth: {
+        hasGmailClientId: !!process.env.GMAIL_CLIENT_ID,
+        hasGmailClientSecret: !!process.env.GMAIL_CLIENT_SECRET,
+        hasBaseUrl: !!process.env.BASE_URL,
+        baseUrl: process.env.BASE_URL,
+      },
+      session: {
+        hasSessionSecret: !!process.env.SESSION_SECRET,
+      },
+      database: {
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+      },
+      request: {
+        path: req.path,
+        method: req.method,
+        hasSession: !!req.session,
+        sessionId: req.session?.id,
+        cookies: req.headers.cookie ? 'present' : 'missing',
+      }
+    });
+  });
+
   app.get('/api/auth/user', async (req: any, res) => {
     // Debug logging
     console.log('🔍 /api/auth/user called:', {
