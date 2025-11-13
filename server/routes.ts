@@ -3060,8 +3060,18 @@ For support, contact: support@hgverifiedvehiclecheck.com
 
     } catch (error: any) {
       console.error("❌ Generate PDF report error:", error);
-      console.error("Error stack:", error.stack);
-      res.status(500).json({ message: "Failed to generate PDF report", error: error.message });
+      console.error("Error message:", error?.message);
+      console.error("Error stack:", error?.stack);
+      
+      // Return more detailed error information
+      const errorMessage = error?.message || "Failed to generate PDF report";
+      const statusCode = error?.message?.includes('timeout') ? 504 : 500;
+      
+      res.status(statusCode).json({ 
+        message: errorMessage,
+        error: error?.message,
+        details: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+      });
     }
   });
 

@@ -913,78 +913,112 @@ export async function generateUnifiedPDF(
     const isVercel = process.env.VERCEL || process.env.VERCEL_URL;
     
     let browser;
-    if (isVercel) {
-      // For Vercel serverless, use @sparticuz/chromium with puppeteer-core
-      try {
-        const chromium = require('@sparticuz/chromium');
-        const puppeteerCore = require('puppeteer-core');
-        
-        // Set executable path for Vercel
-        const executablePath = await chromium.executablePath();
-        
-        browser = await puppeteerCore.launch({
-          args: chromium.args,
-          defaultViewport: chromium.defaultViewport,
-          executablePath,
-          headless: chromium.headless,
-        });
-      } catch (error) {
-        console.error('Failed to use @sparticuz/chromium, falling back to regular puppeteer:', error);
-        // Fallback to regular puppeteer with serverless args
+    try {
+      if (isVercel) {
+        // For Vercel serverless, use @sparticuz/chromium with puppeteer-core
+        console.log('🚀 Launching Puppeteer on Vercel with @sparticuz/chromium...');
+        try {
+          const chromium = require('@sparticuz/chromium');
+          const puppeteerCore = require('puppeteer-core');
+          
+          // Set executable path for Vercel
+          const executablePath = await chromium.executablePath();
+          console.log('✅ Chromium executable path obtained');
+          
+          browser = await puppeteerCore.launch({
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport,
+            executablePath,
+            headless: chromium.headless,
+          });
+          console.log('✅ Browser launched successfully with @sparticuz/chromium');
+        } catch (error: any) {
+          console.error('❌ Failed to use @sparticuz/chromium:', error.message);
+          console.error('Stack:', error.stack);
+          throw new Error(`Puppeteer launch failed: ${error.message}`);
+        }
+      } else {
+        // Local development - use regular puppeteer
+        console.log('🚀 Launching Puppeteer locally...');
         browser = await puppeteer.launch({
           headless: true,
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--single-process',
-            '--disable-software-rasterizer'
+            '--disable-gpu'
           ]
         });
+        console.log('✅ Browser launched successfully');
       }
-    } else {
-      // Local development - use regular puppeteer
-      browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu'
-        ]
+      
+      const page = await browser.newPage();
+      console.log('✅ New page created');
+      
+      // Set content with timeout and less strict wait condition for serverless
+      console.log('📄 Setting page content...');
+      await page.setContent(fullHTML, {
+        waitUntil: isVercel ? 'domcontentloaded' : 'networkidle0', // Less strict for serverless
+        timeout: 30000 // 30 second timeout
       });
+      console.log('✅ Page content set');
+      
+      // Wait a bit for any dynamic content to render
+      if (!isVercel) {
+        await page.waitForTimeout(1000);
+      }
+      
+      // Generate PDF with headerTemplate for pages 2+
+      console.log('📄 Generating PDF...');
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        preferCSSPageSize: true,
+        displayHeaderFooter: false,
+        footerTemplate: '<div></div>', // Empty footer
+        margin: {
+          top: '0mm',
+          right: '12mm',
+          bottom: '10mm',
+          left: '12mm'
+        },
+        timeout: 30000 // 30 second timeout for PDF generation
+      });
+      console.log('✅ PDF generated, size:', pdfBuffer.length, 'bytes');
+      
+      await browser.close();
+      console.log('✅ Browser closed');
+      
+      return Buffer.from(pdfBuffer);
+    } catch (error: any) {
+      // Ensure browser is closed even on error
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeError) {
+          console.error('Error closing browser:', closeError);
+        }
+      }
+      throw error; // Re-throw to be caught by outer catch
     }
     
-    const page = await browser.newPage();
+  } catch (error: any) {
+    console.error('❌ Error generating unified PDF:', error);
+    console.error('Error message:', error?.message);
+    console.error('Error stack:', error?.stack);
     
-    // Set content
-    await page.setContent(fullHTML, {
-      waitUntil: 'networkidle0'
-    });
+    // Provide more detailed error message
+    let errorMessage = 'Failed to generate PDF report';
+    if (error?.message) {
+      errorMessage += `: ${error.message}`;
+    }
+    if (error?.message?.includes('timeout')) {
+      errorMessage += ' (PDF generation timed out - try again)';
+    }
+    if (error?.message?.includes('browser') || error?.message?.includes('launch')) {
+      errorMessage += ' (Browser launch failed - check Puppeteer configuration)';
+    }
     
-    // Generate PDF with headerTemplate for pages 2+
-    // Note: headerTemplate shows on all pages, but we'll make it invisible on page 1 using CSS
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      preferCSSPageSize: true,
-      displayHeaderFooter: false, /* DISABLED - headerTemplate removed completely to prevent overlap on page 1 */
-      footerTemplate: '<div></div>', // Empty footer
-      margin: {
-        top: '0mm', /* NO margin - headerTemplate disabled, headers added manually to pages 2+ */
-        right: '12mm',
-        bottom: '10mm',
-        left: '12mm'
-      }
-    });
-    
-    await browser.close();
-    
-    return Buffer.from(pdfBuffer);
-    
-  } catch (error) {
-    console.error('Error generating unified PDF:', error);
-    throw new Error('Failed to generate PDF report');
+    throw new Error(errorMessage);
   }
 }
