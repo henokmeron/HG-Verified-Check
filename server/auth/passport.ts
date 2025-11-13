@@ -22,8 +22,6 @@ export function configurePassport() {
           clientID: process.env.GMAIL_CLIENT_ID,
           clientSecret: process.env.GMAIL_CLIENT_SECRET,
           callbackURL: callbackURL,
-          // Enable account selection (prompt for account choice)
-          prompt: 'select_account',
         },
         async (accessToken, refreshToken, profile, done) => {
           try {
