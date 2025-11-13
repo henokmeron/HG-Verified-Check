@@ -152,6 +152,23 @@ async function initializeApp() {
 // Initialize app immediately (Vercel will cache this)
 await initializeApp();
 
+// CRITICAL FIX: Register /auth/google route directly here as backup
+// This ensures the route exists even if registerRoutes fails
+if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
+  console.log('🔧 Registering /auth/google route directly in api/index.ts');
+  app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+  app.get('/auth/google/callback', 
+    passport.authenticate('google', { failureRedirect: '/login?error=google_failed' }),
+    (req: any, res: any) => {
+      console.log('✅ Google OAuth callback successful');
+      res.redirect('/app');
+    }
+  );
+  console.log('✅ Direct auth routes registered');
+} else {
+  console.warn('⚠️ GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET not set - auth routes not registered');
+}
+
 // Export the Express app - Vercel will use it as a serverless function
 export default app;
 
