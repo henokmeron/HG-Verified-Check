@@ -4,6 +4,7 @@ import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
+import passport from "passport";
 import { isAuthenticated, isAdmin } from "./auth/middleware";
 import { z } from "zod";
 import nodemailer from "nodemailer";
@@ -1077,6 +1078,19 @@ async function vehicleDataLookup(registration: string) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup authentication routes
+  // Note: Session and Passport are already initialized in api/index.ts for Vercel
+  // So we call setupAuth which will configure Passport and register auth routes
+  const baseUrl = process.env.BASE_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+  
+  // Configure Passport strategies (this is idempotent)
+  const { configurePassport } = await import("./auth/passport");
+  configurePassport();
+  
+  // Register auth routes (session and passport middleware already set up in api/index.ts)
+  const { createAuthRoutes } = await import("./auth/routes");
+  createAuthRoutes(app, passport, baseUrl);
+
   // Diagnostic endpoint to check environment and configuration
   app.get('/api/debug/auth', (req: any, res) => {
     res.json({
