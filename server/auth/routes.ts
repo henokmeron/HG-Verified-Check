@@ -94,31 +94,32 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
     );
     console.log('✅ Google OAuth routes registered');
   } else {
-    // Provide helpful error message if someone tries to access Google OAuth without configuration
+    // If OAuth not configured, show error
     app.get("/auth/google", (req, res) => {
-      // For local development, auto-login as demo user
-      console.log('🔐 Local dev: Auto-logging in as demo user...');
-      
-      // Set session to indicate user is logged in
-      (req.session as any).userLoggedIn = true;
-      (req.session as any).userId = "demo-user";
-      (req.session as any).userRole = "admin"; // Give admin access for testing
-      
-      // Save session and redirect
-      req.session.save((err) => {
-        if (err) {
-          console.error('❌ Session save error:', err);
-          return res.status(500).send('Failed to log in');
-        }
-        
-        console.log('✅ Demo user logged in successfully');
-        
-        // Get redirect URL from session or query
-        const redirectTo = (req.session as any).returnTo || req.query.redirect || '/app';
-        delete (req.session as any).returnTo;
-        
-        res.redirect(redirectTo as string);
-      });
+      console.error('❌ Google OAuth not configured - GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET missing');
+      res.status(503).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>AutoCheckPro - Configuration Error</title>
+          <style>
+            body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+            .container { max-width: 500px; margin: 100px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            h1 { text-align: center; color: #333; margin-bottom: 30px; }
+            .error { background: #fee; padding: 15px; border-radius: 4px; margin-bottom: 20px; color: #c33; border: 1px solid #fcc; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Configuration Error</h1>
+            <div class="error">
+              <strong>Google OAuth Not Configured</strong><br>
+              Please set GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET environment variables.
+            </div>
+          </div>
+        </body>
+        </html>
+      `);
     });
 
     app.get("/auth/google/callback", (req, res) => {
