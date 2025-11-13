@@ -77,17 +77,57 @@ export default function PDFDownloadButton({ vehicleData, reportRaw, className, l
       console.log('Response headers:', response.headers.get('content-type'));
 
       if (!response.ok) {
-        const errorText = await response.text();
+        let errorText = '';
+        let errorData: any = null;
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType?.includes('application/json')) {
+            errorData = await response.json();
+            errorText = errorData.message || errorData.error || JSON.stringify(errorData);
+          } else {
+            errorText = await response.text();
+          }
+        } catch (e) {
+          errorText = `HTTP ${response.status} ${response.statusText}`;
+        }
         console.error('API Error:', errorText);
-        throw new Error(`Failed to generate PDF: ${response.status} ${errorText}`);
+        console.error('Error details:', errorData);
+        
+        // Show more specific error message
+        let userMessage = 'Failed to generate PDF report';
+        if (errorData?.message) {
+          userMessage = errorData.message;
+        } else if (response.status === 504 || errorText.includes('timeout')) {
+          userMessage = 'PDF generation timed out. Please try again.';
+        } else if (response.status === 500) {
+          userMessage = 'Server error while generating PDF. Please try again.';
+        }
+        
+        toast({
+          title: "Download Failed",
+          description: userMessage,
+          variant: "destructive",
+        });
+        throw new Error(userMessage);
       }
 
       // Check if the response is actually a PDF
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/pdf')) {
         console.error('Unexpected content type:', contentType);
-        const text = await response.text();
-        console.error('Response body:', text);
+        let text = '';
+        try {
+          text = await response.text();
+          console.error('Response body:', text);
+        } catch (e) {
+          console.error('Could not read response body');
+        }
+        
+        toast({
+          title: "Download Failed",
+          description: 'Server did not return a PDF file. Please try again.',
+          variant: "destructive",
+        });
         throw new Error('Server did not return a PDF');
       }
 
