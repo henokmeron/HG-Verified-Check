@@ -139,15 +139,23 @@ export function configurePassport() {
 
   // Serialize user for session
   passport.serializeUser((user: any, done) => {
+    console.log('🔐 Serializing user:', user?.id || user?.email);
     done(null, user.id);
   });
 
   // Deserialize user from session
   passport.deserializeUser(async (id: string, done) => {
     try {
+      console.log('🔐 Deserializing user:', id);
       const user = await storage.getUser(id);
+      if (user) {
+        console.log('✅ User deserialized successfully:', user.email);
+      } else {
+        console.warn('⚠️ User not found during deserialization:', id);
+      }
       done(null, user);
     } catch (error) {
+      console.error('❌ Error deserializing user:', error);
       done(error, null);
     }
   });

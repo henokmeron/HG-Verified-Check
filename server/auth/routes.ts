@@ -120,6 +120,12 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
       "/auth/google/callback",
       passport.authenticate("google", { failureRedirect: "/login?error=google_failed" }),
       (req, res) => {
+        console.log('✅ Google OAuth callback successful, user:', req.user?.email || req.user?.id);
+        console.log('🔐 Session after OAuth:', {
+          sessionId: req.session?.id,
+          hasUser: !!req.user,
+          userId: req.user?.id
+        });
         res.redirect("/app");
       }
     );

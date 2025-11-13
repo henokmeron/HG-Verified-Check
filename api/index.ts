@@ -25,17 +25,35 @@ app.set('trust proxy', 1);
 
 // Session middleware - use memory store for serverless
 // Note: In serverless, sessions are ephemeral and may not persist across function invocations
+// For production, consider using a database-backed session store (e.g., connect-pg-simple)
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-session-secret-change-in-production',
   resave: true, // Set to true for better session persistence in serverless
   saveUninitialized: true, // Set to true to ensure session is created
+  name: 'sessionId', // Explicit session name
   cookie: {
     secure: process.env.NODE_ENV === 'production', // HTTPS only in production
     httpOnly: true,
     sameSite: 'lax', // Help with cross-site requests
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    domain: process.env.NODE_ENV === 'production' ? undefined : undefined, // Let browser set domain
+    path: '/' // Ensure cookie is available for all paths
   }
 }));
+
+// Add session debugging middleware
+app.use((req: any, res: Response, next: NextFunction) => {
+  if (req.path === '/api/auth/user' || req.path.startsWith('/auth/')) {
+    console.log('🔍 Session debug:', {
+      path: req.path,
+      hasSession: !!req.session,
+      sessionId: req.session?.id,
+      sessionKeys: req.session ? Object.keys(req.session) : [],
+      cookies: req.headers.cookie ? 'present' : 'missing'
+    });
+  }
+  next();
+});
 
 // Initialize Passport (must be after session middleware)
 // Note: configurePassport is called inside registerRoutes via setupAuth

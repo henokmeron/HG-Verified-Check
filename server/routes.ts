@@ -1078,6 +1078,21 @@ async function vehicleDataLookup(registration: string) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', async (req: any, res) => {
+    // Debug logging
+    console.log('🔍 /api/auth/user called:', {
+      hasSession: !!req.session,
+      sessionId: req.session?.id,
+      isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : false,
+      hasUser: !!req.user,
+      userId: req.user?.id || req.user?.claims?.sub,
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
+        VERCEL_URL: process.env.VERCEL_URL,
+        VERCEL_ENV: process.env.VERCEL_ENV
+      }
+    });
+    
     // Check if we're in production (Vercel) or local dev
     // Vercel sets: VERCEL=1, NODE_ENV=production, VERCEL_ENV=production
     const isProduction = process.env.NODE_ENV === 'production' || 
@@ -1132,9 +1147,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
     
-    // Check authentication without middleware to provide better error handling
-    if (!req.isAuthenticated() || !req.user) {
-      console.log('User not authenticated - session may have expired');
+    // For production (Vercel) - check Passport authentication
+    const isPassportAuth = req.isAuthenticated && req.isAuthenticated();
+    const hasUser = !!req.user;
+    
+    console.log('🔍 Production auth check:', {
+      isPassportAuth,
+      hasUser,
+      userType: req.user ? typeof req.user : 'none',
+      userKeys: req.user ? Object.keys(req.user) : []
+    });
+    
+    if (!isPassportAuth || !hasUser) {
+      console.log('❌ User not authenticated:', {
+        isPassportAuth,
+        hasUser,
+        sessionExists: !!req.session,
+        sessionKeys: req.session ? Object.keys(req.session) : []
+      });
       return res.status(401).json({ 
         message: "Please log in to continue", 
         needsAuth: true,
@@ -1143,10 +1173,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const user = req.user;
-      res.json(user);
+      // Return user data - handle both Passport user format and custom format
+      const user = req.user as any;
+      const userData = {
+        id: user.id || user.claims?.sub || user._id,
+        email: user.email || user.claims?.email,
+        firstName: user.firstName || user.claims?.given_name || user.name?.givenName,
+        lastName: user.lastName || user.claims?.family_name || user.name?.familyName,
+        role: user.role || 'user',
+        creditBalance: user.creditBalance || 0,
+        authProvider: user.authProvider || 'google'
+      };
+      
+      console.log('✅ Returning user data:', userData);
+      res.json(userData);
     } catch (error) {
-      console.error("Error fetching user:", error);
+      console.error("❌ Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
