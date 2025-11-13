@@ -214,16 +214,15 @@ app.get('/test-auth-route', (req: any, res: any) => {
 
 console.log('✅ Auth routes registered (before serveStatic)');
 
-// Don't initialize here - do it in the handler to ensure routes are registered
-// This ensures the handler function is the entry point
+// Initialize app at module load (routes are already registered above)
+// This ensures all routes are ready when the handler is called
+await initializeApp();
 
 // Export handler function for Vercel
-// Vercel serverless functions need a handler function, not just the app
+// Vercel serverless functions can use either the app or a handler function
+// Using handler function for better control
 export default async function handler(req: any, res: any) {
-  // Ensure app is initialized
-  await initializeApp();
-  
-  // Handle the request with Express
+  // App is already initialized, just handle the request
   app(req, res);
 }
 
