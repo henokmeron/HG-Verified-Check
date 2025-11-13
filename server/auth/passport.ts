@@ -12,12 +12,18 @@ export function configurePassport() {
   console.log('🔐 Gmail Client Secret available:', !!process.env.GMAIL_CLIENT_SECRET);
   
   if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
+    const callbackURL = `${process.env.BASE_URL || process.env.VERCEL_URL || "http://localhost:3000"}/auth/google/callback`;
+    console.log('🔗 OAuth Callback URL:', callbackURL);
+    console.log('📋 Client ID (first 20 chars):', process.env.GMAIL_CLIENT_ID.substring(0, 20) + '...');
+    
     passport.use(
       new GoogleStrategy(
         {
           clientID: process.env.GMAIL_CLIENT_ID,
           clientSecret: process.env.GMAIL_CLIENT_SECRET,
-          callbackURL: `${process.env.BASE_URL || process.env.VERCEL_URL || "http://localhost:3000"}/auth/google/callback`,
+          callbackURL: callbackURL,
+          // Enable account selection (prompt for account choice)
+          prompt: 'select_account',
         },
         async (accessToken, refreshToken, profile, done) => {
           try {

@@ -77,7 +77,11 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
 
   // Google OAuth routes - ONLY register if credentials are configured
   if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
-    app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+    // Enable account selection - shows Google's account picker for multiple accounts
+    app.get("/auth/google", passport.authenticate("google", { 
+      scope: ["profile", "email"],
+      prompt: "select_account" // This shows account picker for multiple Gmail accounts
+    }));
 
     app.get(
       "/auth/google/callback",

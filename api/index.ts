@@ -167,7 +167,11 @@ if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
     console.error('❌ Failed to configure Passport:', error);
   }
   
-  app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+  // Enable account selection - shows Google's account picker for multiple accounts
+  app.get('/auth/google', passport.authenticate('google', { 
+    scope: ['profile', 'email'],
+    prompt: 'select_account' // This shows account picker for multiple Gmail accounts
+  }));
   app.get('/auth/google/callback', 
     passport.authenticate('google', { failureRedirect: '/login?error=google_failed' }),
     (req: any, res: any) => {
