@@ -149,14 +149,9 @@ async function initializeApp() {
   return initPromise;
 }
 
-// Initialize app immediately (Vercel will cache this)
-await initializeApp();
-
-// CRITICAL FIX: Register /auth/google route directly here as backup
-// This ensures the route exists even if registerRoutes fails
-// Note: configurePassport is called in registerRoutes, so we need to call it here too
+// CRITICAL: Register auth routes BEFORE initializeApp to ensure they're registered before serveStatic's catch-all
 if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
-  console.log('🔧 Registering /auth/google route directly in api/index.ts');
+  console.log('🔧 Registering /auth/google route directly in api/index.ts (BEFORE serveStatic)');
   
   // Configure Passport strategies first (idempotent, safe to call multiple times)
   try {
@@ -168,6 +163,7 @@ if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
   }
   
   // Enable account selection - shows Google's account picker for multiple accounts
+  // MUST be registered BEFORE serveStatic to avoid catch-all route matching first
   app.get('/auth/google', passport.authenticate('google', { 
     scope: ['profile', 'email'],
     prompt: 'select_account' // This shows account picker for multiple Gmail accounts
@@ -179,10 +175,14 @@ if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
       res.redirect('/app');
     }
   );
-  console.log('✅ Direct auth routes registered');
+  console.log('✅ Direct auth routes registered (before serveStatic)');
 } else {
   console.warn('⚠️ GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET not set - auth routes not registered');
 }
+
+// Initialize app immediately (Vercel will cache this)
+// Note: Auth routes are registered above, so they'll be matched before serveStatic's catch-all
+await initializeApp();
 
 // Export the Express app - Vercel will use it as a serverless function
 export default app;
