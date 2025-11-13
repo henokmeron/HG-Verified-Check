@@ -154,8 +154,19 @@ await initializeApp();
 
 // CRITICAL FIX: Register /auth/google route directly here as backup
 // This ensures the route exists even if registerRoutes fails
+// Note: configurePassport is called in registerRoutes, so we need to call it here too
 if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
   console.log('🔧 Registering /auth/google route directly in api/index.ts');
+  
+  // Configure Passport strategies first (idempotent, safe to call multiple times)
+  try {
+    const { configurePassport } = await import('../dist/server/auth/passport.js');
+    configurePassport();
+    console.log('✅ Passport configured for direct route registration');
+  } catch (error) {
+    console.error('❌ Failed to configure Passport:', error);
+  }
+  
   app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
   app.get('/auth/google/callback', 
     passport.authenticate('google', { failureRedirect: '/login?error=google_failed' }),
