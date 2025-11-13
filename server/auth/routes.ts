@@ -25,7 +25,11 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
     }
     
     // Check if we're in production (Vercel) or local dev
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+    // Vercel sets: VERCEL=1, NODE_ENV=production, VERCEL_ENV=production
+    const isProduction = process.env.NODE_ENV === 'production' || 
+                        process.env.VERCEL === '1' || 
+                        process.env.VERCEL_ENV === 'production' ||
+                        process.env.VERCEL_URL;
     const isLocalDev = !isProduction && !process.env.REPL_ID;
     
     // For local development, show a simple login page
@@ -218,7 +222,11 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
   // Simple login endpoint for local development
   app.post("/api/auth/login", (req, res) => {
     // Check if we're in production (Vercel) or local dev
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+    // Vercel sets: VERCEL=1, NODE_ENV=production, VERCEL_ENV=production
+    const isProduction = process.env.NODE_ENV === 'production' || 
+                        process.env.VERCEL === '1' || 
+                        process.env.VERCEL_ENV === 'production' ||
+                        process.env.VERCEL_URL;
     const isLocalDev = !isProduction && !process.env.REPL_ID;
     
     if (isLocalDev) {

@@ -17,7 +17,7 @@ export function configurePassport() {
         {
           clientID: process.env.GMAIL_CLIENT_ID,
           clientSecret: process.env.GMAIL_CLIENT_SECRET,
-          callbackURL: `${process.env.BASE_URL || "http://localhost:3000"}/auth/google/callback`,
+          callbackURL: `${process.env.BASE_URL || process.env.VERCEL_URL || "http://localhost:3000"}/auth/google/callback`,
         },
         async (accessToken, refreshToken, profile, done) => {
           try {

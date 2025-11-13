@@ -2,7 +2,11 @@ import type { Request, Response, NextFunction } from "express";
 
 export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   // Check if we're in production (Vercel) or local dev
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+  // Vercel sets: VERCEL=1, NODE_ENV=production, VERCEL_ENV=production
+  const isProduction = process.env.NODE_ENV === 'production' || 
+                        process.env.VERCEL === '1' || 
+                        process.env.VERCEL_ENV === 'production' ||
+                        process.env.VERCEL_URL;
   const isLocalDev = !isProduction && !process.env.REPL_ID;
   
   // Check Passport authentication (for production OAuth)
@@ -29,7 +33,11 @@ export function isAuthenticated(req: Request, res: Response, next: NextFunction)
 
 export function isAdmin(req: Request, res: Response, next: NextFunction) {
   // Check if we're in production (Vercel) or local dev
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+  // Vercel sets: VERCEL=1, NODE_ENV=production, VERCEL_ENV=production
+  const isProduction = process.env.NODE_ENV === 'production' || 
+                        process.env.VERCEL === '1' || 
+                        process.env.VERCEL_ENV === 'production' ||
+                        process.env.VERCEL_URL;
   const isLocalDev = !isProduction && !process.env.REPL_ID;
   
   // Check Passport authentication (for production OAuth)

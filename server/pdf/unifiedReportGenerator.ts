@@ -1,4 +1,3 @@
-import puppeteer from 'puppeteer';
 import ReactDOMServer from 'react-dom/server';
 import React from 'react';
 import { VehicleReport } from '../../client/src/report/VehicleReport';
@@ -8,6 +7,9 @@ import { MotHistory } from '../../client/src/report/MotHistory';
 import { VidicheckSchema } from '../../client/src/report/types';
 import fs from 'fs/promises';
 import path from 'path';
+// Use puppeteer-core with @sparticuz/chromium for Vercel serverless
+// Fallback to regular puppeteer for local development
+import puppeteer from 'puppeteer';
 
 // Load the schema
 async function loadSchema(): Promise<VidicheckSchema> {
@@ -907,16 +909,52 @@ export async function generateUnifiedPDF(
 </html>
 `;
     
-    // Launch puppeteer
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu'
-      ]
-    });
+    // Launch puppeteer with Vercel-compatible configuration
+    const isVercel = process.env.VERCEL || process.env.VERCEL_URL;
+    
+    let browser;
+    if (isVercel) {
+      // For Vercel serverless, use @sparticuz/chromium with puppeteer-core
+      try {
+        const chromium = require('@sparticuz/chromium');
+        const puppeteerCore = require('puppeteer-core');
+        
+        // Set executable path for Vercel
+        const executablePath = await chromium.executablePath();
+        
+        browser = await puppeteerCore.launch({
+          args: chromium.args,
+          defaultViewport: chromium.defaultViewport,
+          executablePath,
+          headless: chromium.headless,
+        });
+      } catch (error) {
+        console.error('Failed to use @sparticuz/chromium, falling back to regular puppeteer:', error);
+        // Fallback to regular puppeteer with serverless args
+        browser = await puppeteer.launch({
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--single-process',
+            '--disable-software-rasterizer'
+          ]
+        });
+      }
+    } else {
+      // Local development - use regular puppeteer
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu'
+        ]
+      });
+    }
     
     const page = await browser.newPage();
     
