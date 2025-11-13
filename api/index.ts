@@ -149,15 +149,28 @@ async function initializeApp() {
   return initPromise;
 }
 
-// CRITICAL: Register auth routes BEFORE initializeApp to ensure they're registered before serveStatic's catch-all
-// ALWAYS register the route, even if credentials are missing (to show helpful error)
+// SIMPLIFIED APPROACH: Register routes synchronously, no top-level await
+// This ensures routes are always registered regardless of async initialization
+
+// Configure Passport immediately (synchronously if possible, or lazy load in route)
+let passportConfigured = false;
+async function ensurePassportConfigured() {
+  if (passportConfigured) return;
+  try {
+    const { configurePassport } = await import('../dist/server/auth/passport.js');
+    configurePassport();
+    passportConfigured = true;
+    console.log('✅ Passport configured');
+  } catch (error) {
+    console.error('❌ Failed to configure Passport:', error);
+  }
+}
+
+// Register /auth/google route - ALWAYS registered
 app.get('/auth/google', async (req: any, res: any) => {
   console.log('🔍 /auth/google route hit!');
-  console.log('📧 GMAIL_CLIENT_ID:', !!process.env.GMAIL_CLIENT_ID);
-  console.log('🔐 GMAIL_CLIENT_SECRET:', !!process.env.GMAIL_CLIENT_SECRET);
   
   if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
-    console.error('❌ OAuth credentials missing');
     return res.status(503).send(`
       <!DOCTYPE html>
       <html>
@@ -171,18 +184,7 @@ app.get('/auth/google', async (req: any, res: any) => {
     `);
   }
   
-  // Configure Passport if not already configured
-  try {
-    const { configurePassport } = await import('../dist/server/auth/passport.js');
-    configurePassport();
-    console.log('✅ Passport configured');
-  } catch (error) {
-    console.error('❌ Failed to configure Passport:', error);
-    return res.status(500).send('Failed to configure authentication');
-  }
-  
-  // Redirect to Google OAuth
-  console.log('✅ Redirecting to Google OAuth');
+  await ensurePassportConfigured();
   passport.authenticate('google', { 
     scope: ['profile', 'email'],
     prompt: 'select_account'
@@ -196,33 +198,27 @@ app.get('/auth/google/callback', async (req: any, res: any) => {
     return res.status(503).json({ error: 'OAuth not configured' });
   }
   
+  await ensurePassportConfigured();
   passport.authenticate('google', { failureRedirect: '/login?error=google_failed' })(req, res, () => {
     console.log('✅ Google OAuth callback successful');
     res.redirect('/app');
   });
 });
 
-// Test route to verify routing works
+// Test route
 app.get('/test-auth-route', (req: any, res: any) => {
   res.json({ 
     message: 'Auth routing is working!',
     hasClientId: !!process.env.GMAIL_CLIENT_ID,
-    hasClientSecret: !!process.env.GMAIL_CLIENT_SECRET,
-    callbackUrl: `${process.env.BASE_URL || process.env.VERCEL_URL || 'http://localhost:3000'}/auth/google/callback`
+    hasClientSecret: !!process.env.GMAIL_CLIENT_SECRET
   });
 });
 
-console.log('✅ Auth routes registered (before serveStatic)');
+console.log('✅ Auth routes registered synchronously');
 
-// Initialize app at module load (routes are already registered above)
-// This ensures all routes are ready when the handler is called
-await initializeApp();
+// Initialize app in background (non-blocking)
+initializeApp().catch(err => console.error('Initialization error:', err));
 
-// Export handler function for Vercel
-// Vercel serverless functions can use either the app or a handler function
-// Using handler function for better control
-export default async function handler(req: any, res: any) {
-  // App is already initialized, just handle the request
-  app(req, res);
-}
+// Export the Express app directly - Vercel supports this
+export default app;
 
