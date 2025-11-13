@@ -7,9 +7,14 @@ import { MotHistory } from '../../client/src/report/MotHistory';
 import { VidicheckSchema } from '../../client/src/report/types';
 import fs from 'fs/promises';
 import path from 'path';
+import { fileURLToPath } from 'url';
 // Use puppeteer-core with @sparticuz/chromium for Vercel serverless
 // Fallback to regular puppeteer for local development
 import puppeteer from 'puppeteer';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load the schema
 async function loadSchema(): Promise<VidicheckSchema> {
