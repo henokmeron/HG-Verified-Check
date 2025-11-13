@@ -214,10 +214,16 @@ app.get('/test-auth-route', (req: any, res: any) => {
 
 console.log('✅ Auth routes registered (before serveStatic)');
 
-// Initialize app immediately (Vercel will cache this)
-// Note: Auth routes are registered above, so they'll be matched before serveStatic's catch-all
-await initializeApp();
+// Don't initialize here - do it in the handler to ensure routes are registered
+// This ensures the handler function is the entry point
 
-// Export the Express app - Vercel will use it as a serverless function
-export default app;
+// Export handler function for Vercel
+// Vercel serverless functions need a handler function, not just the app
+export default async function handler(req: any, res: any) {
+  // Ensure app is initialized
+  await initializeApp();
+  
+  // Handle the request with Express
+  app(req, res);
+}
 
