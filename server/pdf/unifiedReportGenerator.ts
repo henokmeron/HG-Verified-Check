@@ -13,9 +13,29 @@ import puppeteer from 'puppeteer';
 
 // Load the schema
 async function loadSchema(): Promise<VidicheckSchema> {
-  const schemaPath = path.join(process.cwd(), 'client/src/data/vidcheck-package-schema.json');
-  const schemaContent = await fs.readFile(schemaPath, 'utf-8');
-  return JSON.parse(schemaContent);
+  // Try multiple paths - Vercel might have different working directory
+  const possiblePaths = [
+    path.join(process.cwd(), 'client/src/data/vidcheck-package-schema.json'),
+    path.join(process.cwd(), 'dist/public/data/vidcheck-package-schema.json'),
+    path.join(__dirname, '../../client/src/data/vidcheck-package-schema.json'),
+    path.join(__dirname, '../../../client/src/data/vidcheck-package-schema.json'),
+    path.join(process.cwd(), 'src/data/vidcheck-package-schema.json'),
+  ];
+  
+  for (const schemaPath of possiblePaths) {
+    try {
+      const schemaContent = await fs.readFile(schemaPath, 'utf-8');
+      console.log('✅ Schema loaded from:', schemaPath);
+      return JSON.parse(schemaContent);
+    } catch (error) {
+      // Try next path
+      continue;
+    }
+  }
+  
+  // If all paths fail, return a minimal schema to prevent complete failure
+  console.warn('⚠️ Could not load schema file, using minimal schema');
+  return {} as VidicheckSchema;
 }
 
 // Define package documents - matching the actual Free Check schema from portal.vehicledataglobal.com
@@ -84,10 +104,30 @@ export async function generateUnifiedPDF(
     // Load schema
     const schema = await loadSchema();
     
-    // Load CSS
-    const cssPath = path.join(process.cwd(), 'client/src/report/report.css');
-    const reportCSS = await fs.readFile(cssPath, 'utf-8');
-    console.log('📄 CSS loaded, size:', reportCSS.length, 'bytes');
+    // Load CSS - try multiple paths for Vercel compatibility
+    const cssPaths = [
+      path.join(process.cwd(), 'client/src/report/report.css'),
+      path.join(process.cwd(), 'dist/public/report/report.css'),
+      path.join(__dirname, '../../client/src/report/report.css'),
+      path.join(__dirname, '../../../client/src/report/report.css'),
+      path.join(process.cwd(), 'src/report/report.css'),
+    ];
+    
+    let reportCSS = '';
+    for (const cssPath of cssPaths) {
+      try {
+        reportCSS = await fs.readFile(cssPath, 'utf-8');
+        console.log('📄 CSS loaded from:', cssPath, 'size:', reportCSS.length, 'bytes');
+        break;
+      } catch (error) {
+        continue;
+      }
+    }
+    
+    if (!reportCSS) {
+      console.warn('⚠️ Could not load CSS file, using minimal CSS');
+      reportCSS = 'body { font-family: Arial, sans-serif; }'; // Fallback CSS
+    }
     
     // Load logo and convert to base64 for PDF - try multiple locations
     let logoUrl = '';
