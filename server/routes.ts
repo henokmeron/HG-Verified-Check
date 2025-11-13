@@ -2905,8 +2905,12 @@ For support, contact: support@hgverifiedvehiclecheck.com
         ? (process.env.REPL_ID ? req.user?.claims?.sub : (req.session as any)?.userId)
         : null;
 
-      // Auto-save PDF report to storage and file system (non-blocking)
-      if (userId || lookupId) {
+      // Auto-save PDF report metadata to database (non-blocking)
+      // Note: On Vercel serverless, we can't save to file system, so we skip file system operations
+      const isVercel = process.env.VERCEL || process.env.VERCEL_URL;
+      
+      if ((userId || lookupId) && !isVercel) {
+        // Only save to file system in non-serverless environments
         try {
           // Ensure reports directory exists
           const reportsDir = path.join(process.cwd(), 'reports');
@@ -2936,7 +2940,7 @@ For support, contact: support@hgverifiedvehiclecheck.com
             downloadUrl = `/api/reports/download/${fileName}`;
           }
 
-          // Save PDF to file system
+          // Save PDF to file system (only in non-serverless environments)
           fs.writeFileSync(filePath, pdfBuffer);
           console.log('✅ PDF saved to file system:', filePath);
 
@@ -2952,6 +2956,23 @@ For support, contact: support@hgverifiedvehiclecheck.com
             lookupId: lookupId || null
           });
           console.log('✅ PDF report saved to database with lookupId:', lookupId || 'none');
+        } catch (e: any) {
+          console.warn("Non-fatal: savePDFReport failed:", e.message);
+        }
+      } else if (userId || lookupId) {
+        // On Vercel, just save metadata to database without file system
+        try {
+          await storage.savePDFReport({
+            userId: userId || "public",
+            vrm: registration.toUpperCase(),
+            checkType: vehicleData?.isComprehensive ? "premium" : "free",
+            bytes: pdfBuffer.length,
+            fileName: `HG-Verified-Report-${registration}-${new Date().toISOString().split('T')[0]}.pdf`,
+            storageKey: `reports/${userId || 'public'}/${registration}-${Date.now()}.pdf`,
+            downloadUrl: '', // No file system URL on serverless
+            lookupId: lookupId || null
+          });
+          console.log('✅ PDF report metadata saved to database (serverless mode)');
         } catch (e: any) {
           console.warn("Non-fatal: savePDFReport failed:", e.message);
         }
