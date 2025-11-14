@@ -50,22 +50,35 @@ export function configurePassport() {
                 console.error('❌ Database tables not found. Attempting to run migrations...');
                 console.error('❌ Error:', errorMessage);
                 
-                // Try to run migrations now
+                // Try to run migrations now with retries
                 try {
                   // @ts-ignore - dist files are generated at build time
                   // From dist/server/auth/passport.js, we need to go up one level to dist/server/
                   const { ensureTablesExist } = await import('../migrate.js');
-                  const migrationResult = await ensureTablesExist();
+                  
+                  // Retry migration up to 5 times with delays
+                  let migrationResult = false;
+                  for (let i = 0; i < 5; i++) {
+                    migrationResult = await ensureTablesExist();
+                    if (migrationResult) {
+                      break;
+                    }
+                    console.log(`⏳ Migration attempt ${i + 1}/5, waiting before retry...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                  }
+                  
                   if (migrationResult) {
                     console.log('✅ Migrations completed, retrying user lookup...');
                     // Retry the user lookup
                     user = await storage.getUserByEmail(email);
                     console.log('📋 User exists after migration:', !!user);
                   } else {
+                    console.error('❌ Migrations failed after retries');
                     return done(new Error("Database tables not initialized. Please wait a moment and try again."), null);
                   }
                 } catch (migrationError: any) {
                   console.error('❌ Migration retry failed:', migrationError?.message || migrationError);
+                  console.error('❌ Migration error stack:', migrationError?.stack);
                   return done(new Error("Database tables not initialized. Please wait a moment and try again."), null);
                 }
               } else {

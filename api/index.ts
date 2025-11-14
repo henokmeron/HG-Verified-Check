@@ -332,10 +332,28 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   try {
     // CRITICAL: Ensure migrations have run before attempting database queries
     console.log('📦 Ensuring database migrations have completed...');
-    const migrationsComplete = await ensureMigrationsRun();
-    if (!migrationsComplete) {
-      console.warn('⚠️ Migrations may not have completed, but continuing...');
+    
+    // Wait for migrations with retries (migration might be running in parallel)
+    let migrationsComplete = false;
+    let retries = 0;
+    const maxRetries = 10;
+    
+    while (!migrationsComplete && retries < maxRetries) {
+      migrationsComplete = await ensureMigrationsRun();
+      if (!migrationsComplete) {
+        retries++;
+        console.log(`⏳ Migrations not complete yet, waiting... (attempt ${retries}/${maxRetries})`);
+        // Wait 500ms before retrying
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
     }
+    
+    if (!migrationsComplete) {
+      console.error('❌ Migrations failed to complete after retries');
+      return res.redirect('/login?error=migration_timeout');
+    }
+    
+    console.log('✅ Migrations confirmed complete, proceeding with authentication...');
     
     await ensurePassportConfigured();
     console.log('✅ Passport configured, starting authentication...');

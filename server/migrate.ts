@@ -193,26 +193,39 @@ export async function ensureTablesExist(): Promise<boolean> {
     // Execute all statements in a transaction
     const client = await pool.connect();
     try {
+      console.log('🔄 Starting database migration transaction...');
       await client.query('BEGIN');
       
+      let statementCount = 0;
       for (const statement of statements) {
         if (statement.trim()) {
+          statementCount++;
+          console.log(`🔄 Executing migration statement ${statementCount}/${statements.length}...`);
           await client.query(statement);
         }
       }
       
+      console.log(`✅ Executed ${statementCount} migration statements, committing...`);
       await client.query('COMMIT');
       console.log('✅ Database migrations completed successfully');
       migrationRun = true;
       return true;
     } catch (error: any) {
-      await client.query('ROLLBACK');
+      console.error('❌ Error during migration, rolling back...');
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('❌ Rollback also failed:', rollbackError);
+      }
+      
       const errorMessage = error?.message || error?.toString() || 'Unknown error';
       console.error('❌ Migration failed:', errorMessage);
+      console.error('❌ Error code:', error?.code);
+      console.error('❌ Error detail:', error?.detail);
       
       // If tables already exist (race condition), that's okay
-      if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
-        console.log('✅ Tables already exist (race condition)');
+      if (errorMessage.includes('already exists') || errorMessage.includes('duplicate') || error?.code === '42P07') {
+        console.log('✅ Tables already exist (race condition or already created)');
         migrationRun = true;
         return true;
       }
