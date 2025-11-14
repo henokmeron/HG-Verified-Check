@@ -191,17 +191,56 @@ app.get('/auth/google', async (req: any, res: any) => {
   })(req, res);
 });
 
-app.get('/auth/google/callback', async (req: any, res: any) => {
+app.get('/auth/google/callback', async (req: any, res: any, next: any) => {
   console.log('🔍 /auth/google/callback route hit!');
+  console.log('📋 Query params:', req.query);
+  console.log('🔐 Session before auth:', {
+    sessionId: req.session?.id,
+    hasSession: !!req.session
+  });
   
   if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
+    console.error('❌ OAuth credentials missing');
     return res.status(503).json({ error: 'OAuth not configured' });
   }
   
   await ensurePassportConfigured();
-  passport.authenticate('google', { failureRedirect: '/login?error=google_failed' })(req, res, () => {
-    console.log('✅ Google OAuth callback successful');
-    res.redirect('/app');
+  
+  // Use Passport authenticate with proper error handling
+  passport.authenticate('google', { 
+    failureRedirect: '/login?error=google_failed',
+    session: true // Ensure session is used
+  })(req, res, (err: any) => {
+    if (err) {
+      console.error('❌ OAuth authentication error:', err);
+      return res.redirect('/login?error=oauth_failed');
+    }
+    
+    if (!req.user) {
+      console.error('❌ No user after OAuth authentication');
+      return res.redirect('/login?error=no_user');
+    }
+    
+    // Log in the user (creates session)
+    req.login(req.user, (loginErr: any) => {
+      if (loginErr) {
+        console.error('❌ Login error after OAuth:', loginErr);
+        return res.redirect('/login?error=login_failed');
+      }
+      
+      console.log('✅ Google OAuth callback successful');
+      console.log('🔐 Session after login:', {
+        sessionId: req.session?.id,
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        hasUser: !!req.user
+      });
+      
+      // Redirect to app
+      const returnTo = (req.session as any)?.returnTo || '/app';
+      delete (req.session as any)?.returnTo;
+      res.redirect(returnTo);
+    });
   });
 });
 
