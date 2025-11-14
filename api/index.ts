@@ -10,6 +10,7 @@ import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import passport from 'passport';
+import pg from 'pg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,13 +24,32 @@ app.use(express.urlencoded({ limit: "30mb", extended: true }));
 // Trust proxy for Vercel (important for sessions and redirects)
 app.set('trust proxy', 1);
 
-// Session middleware - use memory store for serverless
-// Note: In serverless, sessions are ephemeral and may not persist across function invocations
-// For production, consider using a database-backed session store (e.g., connect-pg-simple)
+// Session middleware - use database store for serverless (sessions persist across invocations)
+let sessionStore: any = null;
+if (process.env.DATABASE_URL) {
+  try {
+    const pgSession = await import('connect-pg-simple');
+    const pg = await import('pg');
+    const PGStore = pgSession.default(session);
+    const pool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+    });
+    sessionStore = new PGStore({
+      pool: pool,
+      tableName: 'user_sessions', // Table name for sessions
+      createTableIfMissing: true, // Auto-create table if it doesn't exist
+    });
+    console.log('✅ Using database-backed session store');
+  } catch (error) {
+    console.warn('⚠️ Failed to setup database session store, using memory store:', error);
+  }
+}
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-session-secret-change-in-production',
-  resave: true, // Set to true for better session persistence in serverless
-  saveUninitialized: true, // Set to true to ensure session is created
+  store: sessionStore || undefined, // Use database store if available, otherwise memory
+  resave: false, // Don't resave if unchanged
+  saveUninitialized: false, // Don't save uninitialized sessions
   name: 'sessionId', // Explicit session name
   cookie: {
     secure: process.env.NODE_ENV === 'production', // HTTPS only in production
