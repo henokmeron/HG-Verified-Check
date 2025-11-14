@@ -214,12 +214,12 @@ function Router() {
         <Redirect to="/app/support" />
       </Route>
 
-      {/* Auth routes - let server handle these, don't match in client router */}
+      {/* Auth routes - force full page reload to let server handle these */}
       <Route path="/auth/:path*">
         {() => {
-          // This route exists to prevent the catch-all from matching /auth/*
-          // The actual handling is done by the server
-          window.location.href = window.location.href;
+          // Force a full page reload so the server handles the auth route
+          // This prevents React Router from catching it
+          window.location.replace(window.location.href);
           return null;
         }}
       </Route>
