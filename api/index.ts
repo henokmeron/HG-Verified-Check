@@ -25,14 +25,16 @@ app.use(express.urlencoded({ limit: "30mb", extended: true }));
 app.set('trust proxy', 1);
 
 // Session middleware - use database store for serverless (sessions persist across invocations)
+// Initialize session store synchronously at module load
 let sessionStore: any = null;
 if (process.env.DATABASE_URL) {
   try {
-    const pgSession = await import('connect-pg-simple');
-    const pg = await import('pg');
-    const PGStore = pgSession.default(session);
+    // Use dynamic import for connect-pg-simple (ESM module)
+    const pgSessionModule = await import('connect-pg-simple');
+    const PGStore = pgSessionModule.default(session);
     const pool = new pg.Pool({
       connectionString: process.env.DATABASE_URL,
+      max: 5, // Smaller pool for serverless
     });
     sessionStore = new PGStore({
       pool: pool,
@@ -42,7 +44,10 @@ if (process.env.DATABASE_URL) {
     console.log('✅ Using database-backed session store');
   } catch (error) {
     console.warn('⚠️ Failed to setup database session store, using memory store:', error);
+    console.warn('⚠️ Sessions will not persist across function invocations');
   }
+} else {
+  console.warn('⚠️ DATABASE_URL not set - using memory session store (sessions will not persist)');
 }
 
 app.use(session({
