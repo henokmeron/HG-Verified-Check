@@ -25,15 +25,56 @@ export function configurePassport() {
         },
         async (accessToken, refreshToken, profile, done) => {
           try {
+            console.log('🔍 GoogleStrategy callback invoked');
+            console.log('📋 Profile ID:', profile.id);
+            console.log('📋 Profile emails:', profile.emails?.map((e: any) => e.value));
+            console.log('📋 Profile name:', profile.name);
+            
             const email = profile.emails?.[0]?.value;
             if (!email) {
+              console.error('❌ No email found in Google profile');
               return done(new Error("No email found in Google profile"), null);
             }
 
+            console.log('📧 Processing user with email:', email);
+            
             // Check if user exists by email
-            let user = await storage.getUserByEmail(email);
+            let user;
+            try {
+              user = await storage.getUserByEmail(email);
+              console.log('📋 User exists:', !!user);
+            } catch (error: any) {
+              // Handle database errors (e.g., missing tables)
+              const errorMessage = error?.message || error?.toString() || 'Unknown error';
+              if (errorMessage.includes('does not exist') || errorMessage.includes('relation')) {
+                console.error('❌ Database tables not found. Attempting to run migrations...');
+                console.error('❌ Error:', errorMessage);
+                
+                // Try to run migrations now
+                try {
+                  // @ts-ignore - dist files are generated at build time
+                  const { ensureTablesExist } = await import('../../dist/server/migrate.js');
+                  const migrationResult = await ensureTablesExist();
+                  if (migrationResult) {
+                    console.log('✅ Migrations completed, retrying user lookup...');
+                    // Retry the user lookup
+                    user = await storage.getUserByEmail(email);
+                    console.log('📋 User exists after migration:', !!user);
+                  } else {
+                    return done(new Error("Database tables not initialized. Please wait a moment and try again."), null);
+                  }
+                } catch (migrationError: any) {
+                  console.error('❌ Migration retry failed:', migrationError?.message || migrationError);
+                  return done(new Error("Database tables not initialized. Please wait a moment and try again."), null);
+                }
+              } else {
+                // Re-throw other errors
+                throw error;
+              }
+            }
             
             if (user) {
+              console.log('🔄 Updating existing user:', user.id);
               // Update existing user with Google provider info
               user = await storage.upsertUser({
                 id: user.id,
@@ -55,6 +96,7 @@ export function configurePassport() {
                 lastLoginIp: user.lastLoginIp,
               });
             } else {
+              console.log('➕ Creating new user');
               // Create new user
               user = await storage.upsertUser({
                 email,
@@ -71,8 +113,11 @@ export function configurePassport() {
               });
             }
 
+            console.log('✅ User processed successfully:', user.id, user.email);
             return done(null, user);
-          } catch (error) {
+          } catch (error: any) {
+            console.error('❌ Error in GoogleStrategy callback:', error);
+            console.error('❌ Error stack:', error?.stack);
             return done(error, null);
           }
         }

@@ -1196,22 +1196,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const isPassportAuth = req.isAuthenticated && req.isAuthenticated();
     const hasUser = !!req.user;
     
+    // Enhanced session debugging
+    const sessionData = req.session ? {
+      id: req.session.id,
+      keys: Object.keys(req.session),
+      passport: (req.session as any).passport,
+      cookie: req.session.cookie,
+      hasPassport: !!(req.session as any).passport,
+      passportUser: (req.session as any).passport?.user
+    } : null;
+    
     console.log('🔍 Production auth check:', {
       isPassportAuth,
       hasUser,
       userType: req.user ? typeof req.user : 'none',
-      userKeys: req.user ? Object.keys(req.user) : []
+      userKeys: req.user ? Object.keys(req.user) : [],
+      sessionData
     });
     
     // More lenient check - if user exists in session but Passport hasn't loaded it yet
     if (!isPassportAuth || !hasUser) {
       // Try to get user from session if Passport hasn't loaded it
-      if (req.session && (req.session as any).passport && (req.session as any).passport.user) {
-        const userId = (req.session as any).passport.user;
+      const passportUserId = (req.session as any)?.passport?.user;
+      
+      if (passportUserId) {
+        console.log('🔍 Found passport user ID in session, attempting to load user:', passportUserId);
         try {
-          const user = await storage.getUser(userId);
+          const user = await storage.getUser(passportUserId);
           if (user) {
             console.log('✅ Found user in session, returning user data');
+            // Manually set req.user so Passport knows about it
+            (req as any).user = user;
             return res.json({
               id: user.id,
               email: user.email,
@@ -1221,17 +1236,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
               creditBalance: user.creditBalance || 0,
               authProvider: user.authProvider || "google"
             });
+          } else {
+            console.warn('⚠️ User ID found in session but user not found in database:', passportUserId);
           }
         } catch (error) {
-          console.error('Error fetching user from session:', error);
+          console.error('❌ Error fetching user from session:', error);
         }
+      } else {
+        console.log('⚠️ No passport user ID found in session');
       }
       
       console.log('❌ User not authenticated:', {
         isPassportAuth,
         hasUser,
         sessionExists: !!req.session,
-        sessionKeys: req.session ? Object.keys(req.session) : []
+        sessionKeys: req.session ? Object.keys(req.session) : [],
+        hasPassportInSession: !!(req.session as any)?.passport,
+        passportUserId: passportUserId || 'none'
       });
       return res.status(401).json({ 
         message: "Please log in to continue", 
@@ -3884,55 +3905,10 @@ For support, contact: support@hgverifiedvehiclecheck.com
     });
   });
 
-  app.get('/auth/google/callback', async (req, res) => {
-    const { code } = req.query;
-    
-    try {
-      const { tokens } = await oauth2Client.getToken(code as string);
-      
-      // Save the refresh token
-      console.log('\n🎉 GMAIL OAUTH AUTHORIZATION SUCCESSFUL!');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('SAVE THIS REFRESH TOKEN AS GMAIL_REFRESH_TOKEN:');
-      console.log(tokens.refresh_token);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Add this to your environment variables:');
-      console.log(`GMAIL_REFRESH_TOKEN=${tokens.refresh_token}`);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-      
-      oauth2Client.setCredentials(tokens);
-      res.send(`
-        <html>
-          <head><title>Gmail OAuth Success</title></head>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-            <h1 style="color: #4CAF50;">✅ Gmail OAuth Authorization Successful!</h1>
-            <p>Your Gmail account has been successfully authorized for sending emails.</p>
-            <p><strong>Next steps:</strong></p>
-            <ol>
-              <li>Copy the refresh token from the server console</li>
-              <li>Add it to your environment variables as <code>GMAIL_REFRESH_TOKEN</code></li>
-              <li>Restart your server</li>
-            </ol>
-            <p>You can now close this window and return to your application.</p>
-            <a href="/" style="background: #6B46C1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Return to App</a>
-          </body>
-        </html>
-      `);
-    } catch (error) {
-      console.error('❌ OAuth callback error:', error);
-      res.status(500).send(`
-        <html>
-          <head><title>Gmail OAuth Error</title></head>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-            <h1 style="color: #f44336;">❌ Gmail OAuth Authorization Failed</h1>
-            <p>There was an error during the authorization process.</p>
-            <p>Please try again or check the server logs for more details.</p>
-            <a href="/auth/google" style="background: #6B46C1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Try Again</a>
-          </body>
-        </html>
-      `);
-    }
-  });
+  // REMOVED: Duplicate /auth/google/callback route that was conflicting with user authentication
+  // This route was for Gmail email OAuth (for sending emails), not user authentication
+  // User authentication callback is handled in api/index.ts
+  // If Gmail email OAuth is needed, it should use a different path like /api/gmail-email/callback
 
   const httpServer = createServer(app);
   return httpServer;

@@ -321,20 +321,22 @@ export default function UniversalNavbar({ variant = 'marketing' }: UniversalNavb
                 </Button>
               ) : (
                 <>
-                  <a
-                    href="/auth/google"
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = "/auth/google"; }}
                     className="nav-auth-button nav-auth-button-secondary"
                     data-testid="navbar-login-button"
                   >
                     <span className="font-semibold tracking-wide">Sign In</span>
-                  </a>
-                  <a
-                    href="/auth/google"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { window.location.href = "/auth/google"; }}
                     className="nav-auth-button nav-auth-button-primary"
                     data-testid="navbar-signup-button"
                   >
                     <span className="font-bold tracking-wide">Get Started</span>
-                  </a>
+                  </button>
                 </>
               )}
             </div>
@@ -492,22 +494,28 @@ export default function UniversalNavbar({ variant = 'marketing' }: UniversalNavb
                 </Button>
               ) : (
                 <>
-                  <a
-                    href="/auth/google"
+                  <button
+                    type="button"
+                    onClick={() => { 
+                      handleMobileMenuClose();
+                      window.location.href = "/auth/google";
+                    }}
                     className="nav-mobile-auth-button nav-auth-button-secondary"
-                    onClick={handleMobileMenuClose}
                     data-testid="navbar-mobile-login-button"
                   >
                     Sign In
-                  </a>
-                  <a
-                    href="/auth/google"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { 
+                      handleMobileMenuClose();
+                      window.location.href = "/auth/google";
+                    }}
                     className="nav-mobile-auth-button nav-auth-button-primary"
-                    onClick={handleMobileMenuClose}
                     data-testid="navbar-mobile-signup-button"
                   >
                     Get Started
-                  </a>
+                  </button>
                 </>
               )}
             </div>

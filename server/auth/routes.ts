@@ -76,26 +76,42 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
   });
 
   // Google OAuth routes - ONLY register if credentials are configured
+  // NOTE: These routes are also registered in api/index.ts for Vercel
+  // We check if they exist first to avoid duplicates
   if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
-    // Enable account selection - shows Google's account picker for multiple accounts
-    app.get("/auth/google", passport.authenticate("google", { 
-      scope: ["profile", "email"],
-      prompt: "select_account" // This shows account picker for multiple Gmail accounts
-    }));
+    // Check if route already exists (registered in api/index.ts)
+    const routeExists = app._router?.stack?.some((middleware: any) => {
+      return middleware.route && middleware.route.path === '/auth/google';
+    });
+    
+    if (!routeExists) {
+      // Enable account selection - shows Google's account picker for multiple accounts
+      app.get("/auth/google", passport.authenticate("google", { 
+        scope: ["profile", "email"],
+        prompt: "select_account" // This shows account picker for multiple Gmail accounts
+      }));
+    }
 
-    app.get(
-      "/auth/google/callback",
-      passport.authenticate("google", { failureRedirect: "/login?error=google_failed" }),
-      (req, res) => {
-        console.log('✅ Google OAuth callback successful, user:', req.user?.email || req.user?.id);
-        console.log('🔐 Session after OAuth:', {
-          sessionId: req.session?.id,
-          hasUser: !!req.user,
-          userId: req.user?.id
-        });
-        res.redirect("/app");
-      }
-    );
+    // Check if callback route already exists (registered in api/index.ts)
+    const callbackExists = app._router?.stack?.some((middleware: any) => {
+      return middleware.route && middleware.route.path === '/auth/google/callback';
+    });
+    
+    if (!callbackExists) {
+      app.get(
+        "/auth/google/callback",
+        passport.authenticate("google", { failureRedirect: "/login?error=google_failed" }),
+        (req, res) => {
+          console.log('✅ Google OAuth callback successful, user:', req.user?.email || req.user?.id);
+          console.log('🔐 Session after OAuth:', {
+            sessionId: req.session?.id,
+            hasUser: !!req.user,
+            userId: req.user?.id
+          });
+          res.redirect("/app");
+        }
+      );
+    }
     console.log('✅ Google OAuth routes registered');
   } else {
     // If OAuth not configured, show error

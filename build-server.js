@@ -12,6 +12,7 @@ const serverFiles = [
   'server/vite.ts',
   'server/storage.ts',
   'server/db.ts',
+  'server/migrate.ts',
   'server/auth/index.ts',
   'server/auth/passport.ts',
   'server/auth/routes.ts',

@@ -32,6 +32,58 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <!-- CRITICAL: Intercept /auth/* routes BEFORE React loads to prevent client-side routing -->
+    <script>
+      // This script runs IMMEDIATELY when the page loads, before React
+      (function() {
+        var path = window.location.pathname;
+        if (path.startsWith('/auth/')) {
+          console.error('❌ CRITICAL: /auth/* route detected but index.html was served!');
+          console.error('❌ Path:', path);
+          console.error('❌ This should be handled by Vercel rewrite rules, not the client.');
+          
+          // IMMEDIATELY prevent React from loading
+          // Remove React script tag BEFORE it can execute
+          var reactScripts = document.querySelectorAll('script[type="module"]');
+          reactScripts.forEach(function(script) {
+            if (script.src && (script.src.includes('main.tsx') || script.src.includes('main.js'))) {
+              script.remove();
+            }
+          });
+          
+          // Also prevent future script loading
+          var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+              mutation.addedNodes.forEach(function(node) {
+                if (node.nodeType === 1 && node.tagName === 'SCRIPT') {
+                  var script = node;
+                  if (script.src && (script.src.includes('main.tsx') || script.src.includes('main.js'))) {
+                    script.remove();
+                  }
+                }
+              });
+            });
+          });
+          observer.observe(document.head, { childList: true, subtree: true });
+          observer.observe(document.body, { childList: true, subtree: true });
+          
+          // Show error message
+          document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;background:#f3f4f6"><div style="text-align:center;padding:40px;background:white;border-radius:8px;box-shadow:0 4px 6px rgba(0,0,0,0.1)"><div style="color:#ef4444;font-size:48px;margin-bottom:20px">⚠️</div><h1 style="color:#1f2937;margin-bottom:16px">Routing Error</h1><p style="color:#6b7280;margin-bottom:24px">The authentication route should be handled by the server.<br/>Please check Vercel rewrite rules.</p><button onclick="window.location.reload()" style="background:#6b46c1;color:white;border:none;padding:12px 24px;border-radius:6px;cursor:pointer;font-size:16px">Retry</button></div></div>';
+          
+          // Force immediate hard navigation - this MUST go to the serverless function
+          var fullUrl = window.location.origin + path + 
+                       (window.location.search || '') + 
+                       (window.location.hash || '');
+          
+          console.log('🔄 Forcing hard navigation to:', fullUrl);
+          
+          // Use location.replace immediately (synchronous)
+          setTimeout(function() {
+            window.location.replace(fullUrl);
+          }, 0);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

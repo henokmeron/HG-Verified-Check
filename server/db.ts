@@ -28,12 +28,24 @@ try {
     });
 
     // Test connection on startup with better error handling
+    // Wrap in try-catch to prevent crashes from Neon library errors
     pool.connect().then(client => {
       console.log('✅ Successfully connected to database');
       client.release();
     }).catch(err => {
-      console.error('❌ Database connection failed:', err.message);
+      // Handle Neon-specific error format
+      const errorMessage = err?.message || err?.toString() || 'Unknown error';
+      console.error('❌ Database connection failed:', errorMessage);
       console.error('Please check your DATABASE_URL configuration in the Deployments pane.');
+      // Don't crash - allow the app to continue with mock database
+    });
+    
+    // Add error handlers to prevent crashes
+    pool.on('error', (err: any) => {
+      // Handle pool errors gracefully - don't crash the function
+      const errorMessage = err?.message || err?.toString() || 'Unknown pool error';
+      console.error('⚠️ Database pool error (non-fatal):', errorMessage);
+      // Don't throw - allow the function to continue
     });
 
     db = drizzle({ client: pool, schema });

@@ -4,7 +4,9 @@
 
 import express, { type Request, Response, NextFunction } from 'express';
 // Import from bundled files (built during Vercel deployment)
+// @ts-ignore - dist files are generated at build time
 import { registerRoutes } from '../dist/server/routes.js';
+// @ts-ignore - dist files are generated at build time
 import { serveStatic } from '../dist/server/vite.js';
 import session from 'express-session';
 import path from 'path';
@@ -26,6 +28,7 @@ app.set('trust proxy', 1);
 
 // Session middleware - use database store for serverless (sessions persist across invocations)
 // Initialize session store synchronously at module load
+// IMPORTANT: Wrap in try-catch to prevent crashes from database connection errors
 let sessionStore: any = null;
 if (process.env.DATABASE_URL) {
   try {
@@ -35,16 +38,31 @@ if (process.env.DATABASE_URL) {
     const pool = new pg.Pool({
       connectionString: process.env.DATABASE_URL,
       max: 5, // Smaller pool for serverless
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000, // Shorter timeout for serverless
     });
+    
+    // Add error handlers to prevent crashes from pool errors
+    pool.on('error', (err: any) => {
+      // Handle pool errors gracefully - don't crash the function
+      const errorMessage = err?.message || err?.toString() || 'Unknown pool error';
+      console.error('⚠️ Session store pool error (non-fatal):', errorMessage);
+      // Don't throw - allow the function to continue with memory store fallback
+    });
+    
     sessionStore = new PGStore({
       pool: pool,
       tableName: 'user_sessions', // Table name for sessions
       createTableIfMissing: true, // Auto-create table if it doesn't exist
     });
     console.log('✅ Using database-backed session store');
-  } catch (error) {
-    console.warn('⚠️ Failed to setup database session store, using memory store:', error);
+  } catch (error: any) {
+    // Handle errors gracefully - don't crash the function
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    console.warn('⚠️ Failed to setup database session store, using memory store:', errorMessage);
     console.warn('⚠️ Sessions will not persist across function invocations');
+    // Continue with memory store - don't throw
+    sessionStore = null;
   }
 } else {
   console.warn('⚠️ DATABASE_URL not set - using memory session store (sessions will not persist)');
@@ -93,6 +111,30 @@ app.use((req: any, _res: Response, next: NextFunction) => {
 // But we need to initialize Passport here for the serverless function
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Middleware to ensure Passport deserializes user if passport data exists in session
+app.use(async (req: any, _res: Response, next: NextFunction) => {
+  // If user is not loaded but passport data exists in session, manually trigger deserialization
+  if (!req.user && req.session && (req.session as any).passport && (req.session as any).passport.user) {
+    const userId = (req.session as any).passport.user;
+    try {
+      // Import storage dynamically to avoid circular dependencies
+      // @ts-ignore - dist files are generated at build time
+      const { storage } = await import('../dist/server/storage.js');
+      const user = await storage.getUser(userId);
+      if (user) {
+        req.user = user;
+        console.log('✅ Manually loaded user from session:', user.email);
+      }
+    } catch (error: any) {
+      // Handle errors gracefully - don't crash the function
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      console.error('❌ Error manually deserializing user:', errorMessage);
+      // Continue - don't throw
+    }
+  }
+  next();
+});
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
@@ -182,6 +224,7 @@ let passportConfigured = false;
 async function ensurePassportConfigured() {
   if (passportConfigured) return;
   try {
+    // @ts-ignore - dist files are generated at build time
     const { configurePassport } = await import('../dist/server/auth/passport.js');
     configurePassport();
     passportConfigured = true;
@@ -228,57 +271,144 @@ app.get('/auth/google', async (req: any, res: any, _next: any) => {
   }
 });
 
-app.get('/auth/google/callback', async (req: any, res: any, next: any) => {
+// Register callback route - MUST be before any other route handlers that might match
+app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   console.log('🔍 /auth/google/callback route hit!');
+  console.log('✅ Callback handler is executing!');
   console.log('📋 Query params:', req.query);
+  console.log('📋 Has code:', !!req.query.code);
+  console.log('📋 Has error:', !!req.query.error);
   console.log('🔐 Session before auth:', {
     sessionId: req.session?.id,
-    hasSession: !!req.session
+    hasSession: !!req.session,
+    sessionKeys: req.session ? Object.keys(req.session) : []
   });
+  
+  // Check for OAuth errors from Google
+  if (req.query.error) {
+    console.error('❌ OAuth error from Google:', req.query.error);
+    console.error('❌ Error description:', req.query.error_description);
+    return res.redirect(`/login?error=${req.query.error}`);
+  }
   
   if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
     console.error('❌ OAuth credentials missing');
     return res.status(503).json({ error: 'OAuth not configured' });
   }
   
-  await ensurePassportConfigured();
-  
-  // Use Passport authenticate with proper error handling
-  passport.authenticate('google', { 
-    failureRedirect: '/login?error=google_failed',
-    session: true // Ensure session is used
-  })(req, res, (err: any) => {
-    if (err) {
-      console.error('❌ OAuth authentication error:', err);
-      return res.redirect('/login?error=oauth_failed');
+  try {
+    // CRITICAL: Ensure migrations have run before attempting database queries
+    console.log('📦 Ensuring database migrations have completed...');
+    const migrationsComplete = await ensureMigrationsRun();
+    if (!migrationsComplete) {
+      console.warn('⚠️ Migrations may not have completed, but continuing...');
     }
     
-    if (!req.user) {
-      console.error('❌ No user after OAuth authentication');
-      return res.redirect('/login?error=no_user');
-    }
+    await ensurePassportConfigured();
+    console.log('✅ Passport configured, starting authentication...');
     
-    // Log in the user (creates session)
-    req.login(req.user, (loginErr: any) => {
-      if (loginErr) {
-        console.error('❌ Login error after OAuth:', loginErr);
-        return res.redirect('/login?error=login_failed');
+    // Use Passport authenticate with proper error handling
+    passport.authenticate('google', { 
+      failureRedirect: '/login?error=google_failed',
+      session: true // Ensure session is used
+    })(req, res, (err: any) => {
+      console.log('🔍 Passport authenticate callback invoked');
+      console.log('📋 Error:', err ? err.message : 'none');
+      console.log('📋 Has user:', !!req.user);
+      
+      if (err) {
+        console.error('❌ OAuth authentication error:', err);
+        console.error('❌ Error stack:', err.stack);
+        return res.redirect('/login?error=oauth_failed');
       }
       
-      console.log('✅ Google OAuth callback successful');
-      console.log('🔐 Session after login:', {
-        sessionId: req.session?.id,
-        userId: req.user?.id,
-        userEmail: req.user?.email,
-        hasUser: !!req.user
+      if (!req.user) {
+        console.error('❌ No user after OAuth authentication');
+        console.error('❌ This usually means the GoogleStrategy callback failed');
+        return res.redirect('/login?error=no_user');
+      }
+      
+      console.log('✅ User authenticated, logging in...');
+      console.log('📋 User details:', {
+        id: req.user.id,
+        email: req.user.email,
+        firstName: req.user.firstName
       });
       
-      // Redirect to app
-      const returnTo = (req.session as any)?.returnTo || '/app';
-      delete (req.session as any)?.returnTo;
-      res.redirect(returnTo);
+      // Log in the user (creates session)
+      // CRITICAL: Use req.login with callback to ensure session is saved
+      console.log('🔐 About to call req.login with user:', {
+        userId: req.user.id,
+        userEmail: req.user.email
+      });
+      
+      req.login(req.user, { session: true }, (loginErr: any) => {
+        if (loginErr) {
+          console.error('❌ Login error after OAuth:', loginErr);
+          console.error('❌ Login error stack:', loginErr.stack);
+          return res.redirect('/login?error=login_failed');
+        }
+        
+        console.log('✅ req.login completed, checking session...');
+        console.log('🔐 Session immediately after req.login:', {
+          sessionId: req.session?.id,
+          hasPassport: !!(req.session as any)?.passport,
+          passportUser: (req.session as any)?.passport?.user,
+          sessionKeys: req.session ? Object.keys(req.session) : [],
+          fullSession: JSON.stringify(req.session, null, 2)
+        });
+        
+        // CRITICAL: Explicitly save the session to ensure passport data is persisted
+        // In serverless, we MUST save the session before redirecting
+        req.session.save((saveErr: any) => {
+          if (saveErr) {
+            console.error('❌ Error saving session:', saveErr);
+            console.error('❌ Session save error stack:', saveErr.stack);
+            return res.redirect('/login?error=session_save_failed');
+          }
+          
+          console.log('✅ Session saved successfully');
+          console.log('🔐 Session after save:', {
+            sessionId: req.session?.id,
+            userId: req.user?.id,
+            userEmail: req.user?.email,
+            hasUser: !!req.user,
+            hasPassport: !!(req.session as any)?.passport,
+            passportUser: (req.session as any)?.passport?.user,
+            sessionKeys: req.session ? Object.keys(req.session) : []
+          });
+          
+          // Verify passport data is in session before redirecting
+          if (!(req.session as any)?.passport?.user) {
+            console.error('❌ CRITICAL: Passport data not in session after save!');
+            console.error('❌ Session data:', JSON.stringify(req.session, null, 2));
+            return res.redirect('/login?error=session_data_missing');
+          }
+          
+          console.log('✅ Google OAuth callback successful - passport data confirmed in session');
+          
+          // Redirect to app
+          const returnTo = (req.session as any)?.returnTo || '/app';
+          delete (req.session as any)?.returnTo;
+          console.log('🔄 Redirecting to:', returnTo);
+          
+          // Save session one more time before redirect to ensure it's persisted
+          req.session.save((finalSaveErr: any) => {
+            if (finalSaveErr) {
+              console.error('❌ Error in final session save:', finalSaveErr);
+            } else {
+              console.log('✅ Final session save completed');
+            }
+            res.redirect(returnTo);
+          });
+        });
+      });
     });
-  });
+  } catch (error: any) {
+    console.error('❌ Unexpected error in callback handler:', error);
+    console.error('❌ Error stack:', error.stack);
+    return res.redirect('/login?error=unexpected_error');
+  }
 });
 
 // Test route
@@ -293,7 +423,7 @@ app.get('/test-auth-route', (req: any, res: any) => {
 console.log('✅ Auth routes registered synchronously');
 
 // Add a diagnostic route to verify routing works
-app.get('/api/diagnostic', (_req: any, res: any) => {
+app.get('/api/diagnostic', (req: any, res: any) => {
   const routes: string[] = [];
   app._router?.stack?.forEach((middleware: any) => {
     if (middleware.route) {
@@ -310,9 +440,61 @@ app.get('/api/diagnostic', (_req: any, res: any) => {
   });
 });
 
+// Add global error handlers to prevent crashes from uncaught errors
+process.on('uncaughtException', (error: Error) => {
+  // Log but don't crash - allow the function to continue
+  console.error('⚠️ Uncaught Exception (non-fatal):', error.message);
+  console.error('⚠️ Error stack:', error.stack);
+  // Don't exit - allow the function to continue processing requests
+});
+
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  // Log but don't crash - allow the function to continue
+  const errorMessage = reason?.message || reason?.toString() || 'Unknown rejection';
+  console.error('⚠️ Unhandled Rejection (non-fatal):', errorMessage);
+  // Don't exit - allow the function to continue processing requests
+});
+
+// Run database migrations on startup (CRITICAL: Must complete before handling requests)
+// In serverless, we need to ensure migrations run before any database queries
+let migrationPromise: Promise<boolean> | null = null;
+
+async function ensureMigrationsRun(): Promise<boolean> {
+  if (migrationPromise) {
+    return migrationPromise; // Return existing promise if already running
+  }
+  
+  migrationPromise = (async () => {
+    try {
+      console.log('📦 Checking if database migrations need to run...');
+      // @ts-ignore - dist files are generated at build time
+      const { ensureTablesExist } = await import('../dist/server/migrate.js');
+      const result = await ensureTablesExist();
+      if (result) {
+        console.log('✅ Database migrations completed');
+      } else {
+        console.warn('⚠️ Database migrations did not complete');
+      }
+      return result;
+    } catch (error: any) {
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      console.error('❌ Migration check failed:', errorMessage);
+      return false;
+    }
+  })();
+  
+  return migrationPromise;
+}
+
+// Start migration immediately (non-blocking for module load, but will complete before first request)
+ensureMigrationsRun();
+
 // Initialize app in background (non-blocking)
 // Routes are already registered above, so they'll be matched before serveStatic's catch-all
-initializeApp().catch(err => console.error('Initialization error:', err));
+initializeApp().catch(err => {
+  console.error('⚠️ Initialization error (non-fatal):', err);
+  // Don't throw - allow the function to continue
+});
 
 // Export the Express app directly - Vercel supports this
 export default app;

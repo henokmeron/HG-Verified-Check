@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import PublicPage from "@/pages/public";
@@ -48,6 +48,28 @@ function ScrollToTop() {
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
+
+  // CRITICAL: Force full page reload for auth routes IMMEDIATELY
+  // Check window.location.pathname DIRECTLY (not Wouter's location) to catch it before Wouter processes it
+  // This must run on every render to catch client-side navigation
+  if (typeof window !== 'undefined') {
+    const currentPath = window.location.pathname;
+    if (currentPath.startsWith('/auth/')) {
+      console.log('🔄 Auth route detected in Router, forcing immediate full page reload:', currentPath);
+      // Use replace to avoid adding to history
+      window.location.replace(window.location.href);
+      // Return loading state while redirect happens
+      return (
+        <div className="min-h-[100dvh] flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="text-gray-600">Redirecting to authentication...</p>
+          </div>
+        </div>
+      );
+    }
+  }
 
   if (isLoading) {
     return (
@@ -55,6 +77,14 @@ function Router() {
         <div className="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full" />
       </div>
     );
+  }
+
+  // CRITICAL: Never render routes if we're on an auth path
+  // This check happens AFTER the window.location check above, as a final safety net
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/')) {
+    // This should never execute due to the check above, but just in case...
+    console.error('❌ CRITICAL: Auth route detected in Switch - this should never happen!');
+    return null; // Don't render anything - let the script in index.html handle it
   }
 
   return (
@@ -214,13 +244,23 @@ function Router() {
         <Redirect to="/app/support" />
       </Route>
 
-      {/* Auth routes - force full page reload to let server handle these */}
+      {/* Auth routes are handled by the check at the top of Router() - this route should never match */}
+      {/* But we keep it as a final fallback safety net */}
       <Route path="/auth/:path*">
         {() => {
-          // Force a full page reload so the server handles the auth route
-          // This prevents React Router from catching it
-          window.location.replace(window.location.href);
-          return null;
+          // This should never execute due to the check at the top of Router()
+          // But if it does somehow, force a reload immediately
+          useEffect(() => {
+            window.location.replace(window.location.href);
+          }, []);
+          return (
+            <div className="min-h-[100dvh] flex items-center justify-center bg-gray-50">
+              <div className="text-center">
+                <div className="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto mb-4" />
+                <p className="text-gray-600">Redirecting to authentication...</p>
+              </div>
+            </div>
+          );
         }}
       </Route>
 

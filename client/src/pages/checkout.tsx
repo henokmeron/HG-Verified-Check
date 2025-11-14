@@ -19,21 +19,25 @@ let stripePublicKey: string | undefined;
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
 
 try {
-  stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_placeholder';
-  console.log('🔑 Stripe Public Key:', stripePublicKey ? `${stripePublicKey.substring(0, 20)}...` : 'NOT SET');
+  stripePublicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
   
-  if (stripePublicKey !== 'pk_test_placeholder') {
+  // Check if Stripe key is provided and valid (starts with pk_)
+  if (stripePublicKey && stripePublicKey.trim() !== '' && stripePublicKey.startsWith('pk_')) {
+    console.log('🔑 Stripe Public Key:', `${stripePublicKey.substring(0, 20)}...`);
     stripePromise = loadStripe(stripePublicKey, {
       // Enable Apple Pay and Google Pay
       stripeAccount: undefined, // Use your main account
     });
-  }
-  
-  if (!stripePromise) {
-    console.error('❌ Stripe not initialized - VITE_STRIPE_PUBLIC_KEY is missing or invalid');
+  } else {
+    // Stripe is optional - only log a warning, not an error
+    console.warn('⚠️ Stripe not configured - VITE_STRIPE_PUBLIC_KEY is missing or invalid. Payment features will be disabled.');
+    console.warn('   To enable payments, set VITE_STRIPE_PUBLIC_KEY in your environment variables.');
+    stripePromise = null;
   }
 } catch (error) {
-  console.error('❌ Error initializing Stripe:', error);
+  // Log error but don't crash - Stripe is optional
+  console.warn('⚠️ Error initializing Stripe:', error);
+  console.warn('   Payment features will be disabled.');
   stripePromise = null;
 }
 
