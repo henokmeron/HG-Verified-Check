@@ -191,9 +191,16 @@ async function ensurePassportConfigured() {
   }
 }
 
-// Register /auth/google route - ALWAYS registered
-app.get('/auth/google', async (req: any, res: any) => {
+// Register /auth/google route - ALWAYS registered BEFORE serveStatic catch-all
+// This ensures the route is matched before any catch-all handlers
+app.get('/auth/google', async (req: any, res: any, next: any) => {
   console.log('🔍 /auth/google route hit!');
+  console.log('📋 Request details:', {
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    url: req.url
+  });
   
   if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
     return res.status(503).send(`
@@ -209,11 +216,16 @@ app.get('/auth/google', async (req: any, res: any) => {
     `);
   }
   
-  await ensurePassportConfigured();
-  passport.authenticate('google', { 
-    scope: ['profile', 'email'],
-    prompt: 'select_account'
-  })(req, res);
+  try {
+    await ensurePassportConfigured();
+    passport.authenticate('google', { 
+      scope: ['profile', 'email'],
+      prompt: 'select_account'
+    })(req, res, next);
+  } catch (error) {
+    console.error('❌ Error in /auth/google:', error);
+    next(error);
+  }
 });
 
 app.get('/auth/google/callback', async (req: any, res: any, next: any) => {

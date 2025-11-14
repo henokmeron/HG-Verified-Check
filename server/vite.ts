@@ -94,10 +94,12 @@ export function serveStatic(app: Express) {
   app.use(express.static(distPath));
 
   // Only serve index.html for non-API and non-auth routes that don't match static files
-  app.get("*", (req, res) => {
-    // Don't serve index.html for API routes or auth routes
+  // IMPORTANT: This catch-all must NOT match /auth/ or /api/ routes - they should be handled by route handlers registered before this
+  app.get("*", (req, res, next) => {
+    // Don't serve index.html for API routes or auth routes - let route handlers match them
     if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
-      return res.status(404).json({ message: 'API endpoint not found' });
+      // Don't handle these - let the route handlers registered earlier match them
+      return next(); // Pass to next handler (which should be a 404 handler if no route matched)
     }
     res.sendFile(path.resolve(distPath, "index.html"));
   });
