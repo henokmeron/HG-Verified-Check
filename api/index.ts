@@ -67,7 +67,7 @@ app.use(session({
 }));
 
 // Add request debugging middleware - log ALL requests to see what's happening
-app.use((req: any, res: Response, next: NextFunction) => {
+app.use((req: any, _res: Response, next: NextFunction) => {
   console.log('🌐 Request received:', {
     method: req.method,
     path: req.path,
@@ -193,7 +193,7 @@ async function ensurePassportConfigured() {
 
 // Register /auth/google route - ALWAYS registered BEFORE serveStatic catch-all
 // This ensures the route is matched before any catch-all handlers
-app.get('/auth/google', async (req: any, res: any, next: any) => {
+app.get('/auth/google', async (req: any, res: any, _next: any) => {
   console.log('🔍 /auth/google route hit!');
   console.log('📋 Request details:', {
     method: req.method,
@@ -293,7 +293,7 @@ app.get('/test-auth-route', (req: any, res: any) => {
 console.log('✅ Auth routes registered synchronously');
 
 // Add a diagnostic route to verify routing works
-app.get('/api/diagnostic', (req: any, res: any) => {
+app.get('/api/diagnostic', (_req: any, res: any) => {
   const routes: string[] = [];
   app._router?.stack?.forEach((middleware: any) => {
     if (middleware.route) {
