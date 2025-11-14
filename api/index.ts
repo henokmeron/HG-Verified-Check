@@ -221,10 +221,10 @@ app.get('/auth/google', async (req: any, res: any, _next: any) => {
     passport.authenticate('google', { 
       scope: ['profile', 'email'],
       prompt: 'select_account'
-    })(req, res, next);
+    })(req, res, _next);
   } catch (error) {
     console.error('❌ Error in /auth/google:', error);
-    next(error);
+    _next(error);
   }
 });
 

@@ -214,6 +214,16 @@ function Router() {
         <Redirect to="/app/support" />
       </Route>
 
+      {/* Auth routes - let server handle these, don't match in client router */}
+      <Route path="/auth/:path*">
+        {() => {
+          // This route exists to prevent the catch-all from matching /auth/*
+          // The actual handling is done by the server
+          window.location.href = window.location.href;
+          return null;
+        }}
+      </Route>
+
       {/* Fallback for landing page */}
       {!isAuthenticated && <Route path="/landing" component={Landing} />}
       
