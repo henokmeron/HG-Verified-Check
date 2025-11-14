@@ -280,7 +280,26 @@ app.get('/test-auth-route', (req: any, res: any) => {
 
 console.log('✅ Auth routes registered synchronously');
 
+// Add a diagnostic route to verify routing works
+app.get('/api/diagnostic', (req: any, res: any) => {
+  const routes: string[] = [];
+  app._router?.stack?.forEach((middleware: any) => {
+    if (middleware.route) {
+      routes.push(`${Object.keys(middleware.route.methods).join(',').toUpperCase()} ${middleware.route.path}`);
+    }
+  });
+  res.json({
+    message: 'Diagnostic endpoint',
+    registeredRoutes: routes.filter(r => r.includes('auth') || r.includes('google') || r.includes('diagnostic')),
+    hasSession: !!req.session,
+    sessionId: req.session?.id,
+    isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : false,
+    hasUser: !!req.user
+  });
+});
+
 // Initialize app in background (non-blocking)
+// Routes are already registered above, so they'll be matched before serveStatic's catch-all
 initializeApp().catch(err => console.error('Initialization error:', err));
 
 // Export the Express app directly - Vercel supports this

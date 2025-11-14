@@ -1203,7 +1203,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       userKeys: req.user ? Object.keys(req.user) : []
     });
     
+    // More lenient check - if user exists in session but Passport hasn't loaded it yet
     if (!isPassportAuth || !hasUser) {
+      // Try to get user from session if Passport hasn't loaded it
+      if (req.session && (req.session as any).passport && (req.session as any).passport.user) {
+        const userId = (req.session as any).passport.user;
+        try {
+          const user = await storage.getUser(userId);
+          if (user) {
+            console.log('✅ Found user in session, returning user data');
+            return res.json({
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName || user.email.split('@')[0],
+              lastName: user.lastName || "",
+              role: user.role || "user",
+              creditBalance: user.creditBalance || 0,
+              authProvider: user.authProvider || "google"
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching user from session:', error);
+        }
+      }
+      
       console.log('❌ User not authenticated:', {
         isPassportAuth,
         hasUser,
