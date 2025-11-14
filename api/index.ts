@@ -71,8 +71,8 @@ if (process.env.DATABASE_URL) {
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-session-secret-change-in-production',
   store: sessionStore || undefined, // Use database store if available, otherwise memory
-  resave: false, // Don't resave if unchanged
-  saveUninitialized: false, // Don't save uninitialized sessions
+  resave: true, // CRITICAL: Force resave in serverless to ensure persistence
+  saveUninitialized: true, // CRITICAL: Save even uninitialized sessions in serverless
   name: 'sessionId', // Explicit session name
   cookie: {
     secure: process.env.NODE_ENV === 'production', // HTTPS only in production
@@ -83,6 +83,14 @@ app.use(session({
     path: '/' // Ensure cookie is available for all paths
   }
 }));
+
+// Log session store configuration
+console.log('🔐 Session configuration:', {
+  hasStore: !!sessionStore,
+  storeType: sessionStore ? 'database' : 'memory',
+  resave: true,
+  saveUninitialized: true
+});
 
 // Add request debugging middleware - log ALL requests to see what's happening
 app.use((req: any, _res: Response, next: NextFunction) => {

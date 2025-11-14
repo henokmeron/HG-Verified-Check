@@ -53,7 +53,8 @@ export function configurePassport() {
                 // Try to run migrations now
                 try {
                   // @ts-ignore - dist files are generated at build time
-                  const { ensureTablesExist } = await import('../../dist/server/migrate.js');
+                  // From dist/server/auth/passport.js, we need to go up one level to dist/server/
+                  const { ensureTablesExist } = await import('../migrate.js');
                   const migrationResult = await ensureTablesExist();
                   if (migrationResult) {
                     console.log('✅ Migrations completed, retrying user lookup...');
