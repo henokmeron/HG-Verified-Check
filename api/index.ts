@@ -242,6 +242,31 @@ async function ensurePassportConfigured() {
   }
 }
 
+// Add loop prevention: Track auth attempts and prevent infinite redirects
+// MUST be registered BEFORE auth routes
+app.use((req: any, res: Response, next: NextFunction) => {
+  // Only apply to auth routes
+  if (req.path.startsWith('/auth/google')) {
+    const authAttempts = (req.session as any)?.authAttempts || 0;
+    
+    // If too many attempts, break the loop
+    if (authAttempts > 3) {
+      console.error('❌ Too many auth attempts detected, breaking redirect loop');
+      delete (req.session as any)?.authAttempts;
+      return res.redirect('/login?error=redirect_loop_detected');
+    }
+    
+    // Increment attempt counter
+    (req.session as any).authAttempts = authAttempts + 1;
+    
+    // Reset counter on successful callback (when code is present)
+    if (req.path === '/auth/google/callback' && req.query.code) {
+      delete (req.session as any)?.authAttempts;
+    }
+  }
+  next();
+});
+
 // Register /auth/google route - ALWAYS registered BEFORE serveStatic catch-all
 // This ensures the route is matched before any catch-all handlers
 app.get('/auth/google', async (req: any, res: any, _next: any) => {
@@ -316,8 +341,9 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
     console.log('✅ Passport configured, starting authentication...');
     
     // Use Passport authenticate with proper error handling
+    // CRITICAL: Never redirect back to /auth/google to prevent loops
     passport.authenticate('google', { 
-      failureRedirect: '/login?error=google_failed',
+      failureRedirect: '/login?error=google_failed', // Always redirect to /login, never back to /auth/google
       session: true // Ensure session is used
     })(req, res, (err: any) => {
       console.log('🔍 Passport authenticate callback invoked');
@@ -415,6 +441,7 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   } catch (error: any) {
     console.error('❌ Unexpected error in callback handler:', error);
     console.error('❌ Error stack:', error.stack);
+    // CRITICAL: Always redirect to /login, NEVER back to /auth/google to prevent loops
     return res.redirect('/login?error=unexpected_error');
   }
 });
