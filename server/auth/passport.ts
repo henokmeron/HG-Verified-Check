@@ -12,8 +12,27 @@ export function configurePassport() {
   console.log('🔐 Gmail Client Secret available:', !!process.env.GMAIL_CLIENT_SECRET);
   
   if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
-    const callbackURL = `${process.env.BASE_URL || process.env.VERCEL_URL || "http://localhost:3000"}/auth/google/callback`;
+    // CRITICAL: Use BASE_URL for production, fallback to VERCEL_URL, then localhost
+    // BASE_URL should be set to https://hg-verified-check.vercel.app in Vercel
+    let baseUrl = process.env.BASE_URL;
+    if (!baseUrl && process.env.VERCEL_URL) {
+      // If VERCEL_URL is a preview URL, use production domain instead
+      if (process.env.VERCEL_URL.includes('hg-verified-check') && !process.env.VERCEL_URL.includes('hg-verified-check.vercel.app')) {
+        baseUrl = 'https://hg-verified-check.vercel.app';
+      } else {
+        baseUrl = `https://${process.env.VERCEL_URL}`;
+      }
+    }
+    if (!baseUrl) {
+      baseUrl = "http://localhost:3000";
+    }
+    
+    // Ensure baseUrl doesn't have trailing slash
+    baseUrl = baseUrl.replace(/\/$/, '');
+    
+    const callbackURL = `${baseUrl}/auth/google/callback`;
     console.log('🔗 OAuth Callback URL:', callbackURL);
+    console.log('📋 Base URL used:', baseUrl);
     console.log('📋 Client ID (first 20 chars):', process.env.GMAIL_CLIENT_ID.substring(0, 20) + '...');
     
     passport.use(
