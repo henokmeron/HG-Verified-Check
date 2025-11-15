@@ -377,22 +377,75 @@ export async function ensureTablesExist(): Promise<boolean> {
       console.error('❌ Error code:', error?.code);
       console.error('❌ Error detail:', error?.detail);
       
-      // If tables already exist (race condition), that's okay
+      // If error is about objects already existing, check if tables actually exist
       if (errorMessage.includes('already exists') || errorMessage.includes('duplicate') || error?.code === '42P07') {
-        console.log('✅ Tables already exist (race condition or already created)');
-        migrationRun = true;
-        return true;
+        console.log('⚠️ Migration error suggests objects already exist - verifying...');
+        try {
+          const verifyResult = await client.query(`
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name = 'users'
+            );
+          `);
+          const verified = verifyResult.rows[0]?.exists || false;
+          if (verified) {
+            console.log('✅ Tables verified to exist despite error - migration successful');
+            migrationRun = true;
+            client.release();
+            await pool.end();
+            return true;
+          }
+        } catch (verifyError: any) {
+          console.error('❌ Could not verify table existence:', verifyError?.message);
+        }
       }
       
-      throw error;
-    } finally {
       client.release();
       await pool.end();
+      return false;
+    } finally {
+      if (client) {
+        try {
+          client.release();
+        } catch (e) {
+          console.error('❌ Error releasing client:', e);
+        }
+      }
     }
   } catch (error: any) {
     const errorMessage = error?.message || error?.toString() || 'Unknown error';
-    console.error('❌ Failed to run migrations:', errorMessage);
-    // Don't throw - allow app to continue (might be a connection issue)
+    console.error('❌ Migration error (outer catch):', errorMessage);
+    console.error('❌ Error stack:', error?.stack);
+    
+    // CRITICAL: Even if migration fails, check if tables exist (might have been created by another instance)
+    if (pool) {
+      try {
+        const finalCheck = await pool.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'users'
+          );
+        `);
+        const tablesExist = finalCheck.rows[0]?.exists || false;
+        if (tablesExist) {
+          console.log('✅ Tables exist despite migration error - marking as complete');
+          migrationRun = true;
+          await pool.end();
+          return true;
+        }
+      } catch (checkError: any) {
+        console.error('❌ Could not verify tables after error:', checkError?.message);
+      } finally {
+        try {
+          await pool.end();
+        } catch (e) {
+          // Ignore pool end errors
+        }
+      }
+    }
+    
     return false;
   }
 }
