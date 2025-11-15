@@ -344,30 +344,119 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   }
   
   try {
-    // CRITICAL: Ensure migrations have run before attempting database queries
-    console.log('📦 Ensuring database migrations have completed...');
+    // CRITICAL: Check if tables exist directly (faster than waiting for migration function)
+    // This allows us to proceed even if migration function is slow or timing out
+    console.log('📦 Checking if database tables exist...');
     
-    // Wait for migrations with retries (migration might be running in parallel)
-    let migrationsComplete = false;
-    let retries = 0;
-    const maxRetries = 10;
+    let tablesExist = false;
+    try {
+      // @ts-ignore
+      const { pool } = await import('../dist/server/db.js');
+      if (pool) {
+        const checkResult = await pool.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'users'
+          );
+        `);
+        tablesExist = checkResult.rows[0]?.exists || false;
+        console.log(`📋 Tables exist check: ${tablesExist ? '✅ YES' : '❌ NO'}`);
+      }
+    } catch (checkError: any) {
+      console.error('❌ Error checking tables directly:', checkError?.message);
+      // Continue with migration check as fallback
+    }
     
-    while (!migrationsComplete && retries < maxRetries) {
-      migrationsComplete = await ensureMigrationsRun();
-      if (!migrationsComplete) {
-        retries++;
-        console.log(`⏳ Migrations not complete yet, waiting... (attempt ${retries}/${maxRetries})`);
-        // Wait 500ms before retrying
-        await new Promise(resolve => setTimeout(resolve, 500));
+    // If tables don't exist, try to run migrations (but don't wait forever)
+    if (!tablesExist) {
+      console.log('📦 Tables not found - attempting to run migrations...');
+      let migrationsComplete = false;
+      let retries = 0;
+      const maxRetries = 5; // Reduced from 10 to fail faster
+      
+      while (!migrationsComplete && retries < maxRetries) {
+        migrationsComplete = await ensureMigrationsRun();
+        if (!migrationsComplete) {
+          retries++;
+          console.log(`⏳ Migrations not complete yet, waiting... (attempt ${retries}/${maxRetries})`);
+          // Wait 500ms before retrying
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Re-check if tables exist (might have been created by another instance)
+          try {
+            // @ts-ignore
+            const { pool } = await import('../dist/server/db.js');
+            if (pool) {
+              const recheckResult = await pool.query(`
+                SELECT EXISTS (
+                  SELECT FROM information_schema.tables 
+                  WHERE table_schema = 'public' 
+                  AND table_name = 'users'
+                );
+              `);
+              if (recheckResult.rows[0]?.exists) {
+                console.log('✅ Tables now exist (created by another instance)');
+                tablesExist = true;
+                break; // Exit retry loop
+              }
+            }
+          } catch (e) {
+            // Ignore recheck errors
+          }
+        }
+      }
+      
+      // Final check: if tables still don't exist after retries, show error
+      if (!tablesExist && !migrationsComplete) {
+        // One final direct check
+        try {
+          // @ts-ignore
+          const { pool } = await import('../dist/server/db.js');
+          if (pool) {
+            const finalCheck = await pool.query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'users'
+              );
+            `);
+            tablesExist = finalCheck.rows[0]?.exists || false;
+          }
+        } catch (e) {
+          // Ignore
+        }
+        
+        if (!tablesExist) {
+          console.error('❌ Migrations failed to complete and tables do not exist');
+          return res.status(500).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Database Error</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+                .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                h1 { color: #ef4444; margin-bottom: 20px; }
+                p { color: #6b7280; margin-bottom: 20px; }
+                .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+              </style>
+            </head>
+            <body>
+              <div class="error-box">
+                <h1>❌ Database Not Ready</h1>
+                <p>Database tables are not initialized. Please wait a moment and try again.</p>
+                <p>If this persists, check your DATABASE_URL configuration in Vercel.</p>
+                <a href="/" class="button">Return to Homepage</a>
+              </div>
+            </body>
+            </html>
+          `);
+        }
       }
     }
     
-    if (!migrationsComplete) {
-      console.error('❌ Migrations failed to complete after retries');
-      return res.redirect('/login?error=migration_timeout');
-    }
-    
-    console.log('✅ Migrations confirmed complete, proceeding with authentication...');
+    console.log('✅ Database tables confirmed to exist, proceeding with authentication...');
     
     await ensurePassportConfigured();
     console.log('✅ Passport configured, starting authentication...');
