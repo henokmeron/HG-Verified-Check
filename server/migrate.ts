@@ -213,8 +213,10 @@ END \$\$;
 }
 
 export async function ensureTablesExist(): Promise<boolean> {
+  // CRITICAL: Check if migration already ran (module-level cache)
   if (migrationRun) {
-    return true; // Already checked
+    console.log('✅ Migrations already completed (cached)');
+    return true;
   }
 
   if (!process.env.DATABASE_URL) {
@@ -222,27 +224,38 @@ export async function ensureTablesExist(): Promise<boolean> {
     return false;
   }
 
+  let pool: Pool | null = null;
   try {
-    const pool = new Pool({ 
+    pool = new Pool({ 
       connectionString: process.env.DATABASE_URL,
       max: 1, // Single connection for migrations
     });
 
-    // Check if users table exists
-    const checkResult = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'users'
-      );
-    `);
+    // CRITICAL: Check if users table exists FIRST (before any migration attempts)
+    // This is the fastest check and avoids unnecessary work
+    console.log('🔍 Checking if database tables exist...');
+    let checkResult;
+    try {
+      checkResult = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'users'
+        );
+      `);
+    } catch (checkError: any) {
+      console.error('❌ Error checking for users table:', checkError?.message);
+      // If we can't even check, the database might not be accessible
+      // But we'll still try to run migrations in case it's a temporary issue
+      console.log('⚠️ Could not check table existence, proceeding with migration attempt...');
+    }
 
-    const usersTableExists = checkResult.rows[0]?.exists || false;
+    const usersTableExists = checkResult?.rows?.[0]?.exists || false;
 
     if (usersTableExists) {
-      console.log('✅ Database tables already exist');
+      console.log('✅ Database tables already exist - no migration needed');
       migrationRun = true;
-      await pool.end();
+      if (pool) await pool.end();
       return true;
     }
 
@@ -328,8 +341,29 @@ export async function ensureTablesExist(): Promise<boolean> {
       console.log(`✅ Executed ${statementCount} migration statements, committing...`);
       await client.query('COMMIT');
       console.log('✅ Database migrations completed successfully');
-      migrationRun = true;
-      return true;
+      
+      // CRITICAL: Verify tables were created before marking as complete
+      const verifyResult = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'users'
+        );
+      `);
+      const verified = verifyResult.rows[0]?.exists || false;
+      
+      if (verified) {
+        console.log('✅ Migration verified - users table exists');
+        migrationRun = true;
+        client.release();
+        await pool.end();
+        return true;
+      } else {
+        console.error('❌ Migration completed but users table still does not exist');
+        client.release();
+        await pool.end();
+        return false;
+      }
     } catch (error: any) {
       console.error('❌ Error during migration, rolling back...');
       try {
