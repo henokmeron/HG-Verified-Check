@@ -523,8 +523,37 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   } catch (error: any) {
     console.error('❌ Unexpected error in callback handler:', error);
     console.error('❌ Error stack:', error.stack);
-    // CRITICAL: Always redirect to /login, NEVER back to /auth/google to prevent loops
-    return res.redirect('/login?error=unexpected_error');
+    // CRITICAL: Show error page instead of redirecting to prevent loops
+    // This ensures user sees what went wrong instead of getting stuck in a loop
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authentication Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+          .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+          h1 { color: #ef4444; margin-bottom: 20px; }
+          p { color: #6b7280; margin-bottom: 20px; line-height: 1.6; }
+          .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
+          .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+          .button:hover { background: #5b21b6; }
+        </style>
+      </head>
+      <body>
+        <div class="error-box">
+          <h1>❌ Authentication Error</h1>
+          <p>There was an error during the login process. Please try again.</p>
+          <div class="error-details">
+            <strong>Error:</strong> ${error?.message || 'Unknown error'}<br>
+            <strong>Please check Vercel logs for more details.</strong>
+          </div>
+          <a href="/" class="button">Return to Homepage</a>
+          <a href="/auth/google" class="button" style="background: #059669; margin-left: 10px;">Try Login Again</a>
+        </div>
+      </body>
+      </html>
+    `);
   }
 });
 
