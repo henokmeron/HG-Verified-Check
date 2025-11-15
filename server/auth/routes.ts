@@ -85,10 +85,10 @@ export function createAuthRoutes(app: Express, passport: Authenticator, baseUrl:
     });
     
     if (!routeExists) {
-      // Enable account selection - shows Google's account picker for multiple accounts
+      // OAuth route - account picker will show automatically if needed
+      // Removed prompt: "select_account" to prevent redirect loops
       app.get("/auth/google", passport.authenticate("google", { 
-        scope: ["profile", "email"],
-        prompt: "select_account" // This shows account picker for multiple Gmail accounts
+        scope: ["profile", "email"]
       }));
     }
 
