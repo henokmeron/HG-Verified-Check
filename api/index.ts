@@ -294,9 +294,10 @@ app.get('/auth/google', async (req: any, res: any, _next: any) => {
   
   try {
     await ensurePassportConfigured();
+    // CRITICAL: Removed prompt: 'select_account' to prevent redirect loops
+    // Google will automatically show account picker if needed
     passport.authenticate('google', { 
-      scope: ['profile', 'email'],
-      prompt: 'select_account'
+      scope: ['profile', 'email']
     })(req, res, _next);
   } catch (error) {
     console.error('❌ Error in /auth/google:', error);

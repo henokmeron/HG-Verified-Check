@@ -1,0 +1,93 @@
+Table Name,Column Name,Data Type,Required,Default Value,Description,Index
+users,id,varchar,Yes,gen_random_uuid(),Unique user ID (UUID),PRIMARY KEY
+users,email,varchar,Yes,,"User email address (unique)",idx_users_email
+users,first_name,varchar,No,,"User's first name",
+users,last_name,varchar,No,,"User's last name",
+users,profile_image_url,varchar,No,,"Google profile image URL",
+users,credit_balance,integer,Yes,0,"Current credit balance",
+users,stripe_customer_id,varchar,No,,"Stripe customer ID for payments",
+users,role,varchar,Yes,'user',"User role ('user' or 'admin')",idx_users_role
+users,is_active,boolean,Yes,true,"Whether account is active",
+users,last_login_at,timestamp,No,,"Last login timestamp",
+users,preferences,jsonb,Yes,{},"User preferences (JSON)",
+users,auth_provider,varchar,Yes,'local',"Authentication provider ('google', 'local')",idx_users_auth_provider
+users,provider_id,varchar,No,,"OAuth provider user ID",idx_users_provider_id
+users,password_hash,text,No,,"Hashed password (for local auth)",
+users,email_verified,boolean,Yes,false,"Whether email is verified",
+users,mfa_enabled,boolean,Yes,false,"Whether MFA is enabled",
+users,last_login_ip,varchar,No,,"IP address of last login",
+users,created_at,timestamp,Yes,now(),"Account creation timestamp",idx_users_created_at
+users,updated_at,timestamp,Yes,now(),"Last update timestamp",
+vehicle_lookups,id,varchar,Yes,gen_random_uuid(),"Unique lookup ID (UUID)",PRIMARY KEY
+vehicle_lookups,user_id,varchar,Yes,,"User who performed lookup (FK to users.id)",idx_vehicle_lookups_user_id
+vehicle_lookups,registration,varchar,Yes,,"Vehicle registration number",idx_vehicle_lookups_registration
+vehicle_lookups,vehicle_data,jsonb,No,,"Full DVLA API response (JSON)",
+vehicle_lookups,report_raw,jsonb,No,,"Complete VIDcheck JSON response",
+vehicle_lookups,credits_cost,integer,Yes,1,"Credits deducted for lookup",
+vehicle_lookups,success,boolean,Yes,true,"Whether lookup succeeded",idx_vehicle_lookups_success
+vehicle_lookups,error_message,text,No,,"Error message if failed",
+vehicle_lookups,report_type,varchar,Yes,'comprehensive',"Type of report ('free', 'comprehensive')",
+vehicle_lookups,processing_time,integer,No,,"Time taken in milliseconds",
+vehicle_lookups,api_provider,varchar,Yes,'vidcheck',"API provider used",
+vehicle_lookups,metadata,jsonb,Yes,{},"Additional metadata (JSON)",
+vehicle_lookups,created_at,timestamp,Yes,now(),"Lookup timestamp",idx_vehicle_lookups_created_at
+credit_transactions,id,varchar,Yes,gen_random_uuid(),"Unique transaction ID (UUID)",PRIMARY KEY
+credit_transactions,user_id,varchar,Yes,,"User who made transaction (FK to users.id)",idx_credit_transactions_user_id
+credit_transactions,type,varchar,Yes,,"Transaction type ('purchase', 'deduction', 'refund', 'bonus', 'expired')",idx_credit_transactions_type
+credit_transactions,amount,integer,Yes,,"Credit amount (positive or negative)",
+credit_transactions,description,text,No,,"Transaction description",
+credit_transactions,stripe_payment_intent_id,varchar,No,,"Stripe payment ID",
+credit_transactions,metadata,jsonb,Yes,{},"Additional transaction data (JSON)",
+credit_transactions,created_at,timestamp,Yes,now(),"Transaction timestamp",idx_credit_transactions_created_at
+saved_reports,id,varchar,Yes,gen_random_uuid(),"Unique report ID (UUID)",PRIMARY KEY
+saved_reports,user_id,varchar,Yes,,"User who saved report (FK to users.id)",idx_saved_reports_user_id
+saved_reports,vrm,varchar,Yes,,"Vehicle registration number",idx_saved_reports_vrm
+saved_reports,check_type,varchar,Yes,,"Type of check ('comprehensive' or 'free')",
+saved_reports,bytes,integer,Yes,,"PDF file size in bytes",
+saved_reports,file_name,varchar,Yes,,"PDF filename",
+saved_reports,storage_key,varchar,Yes,,"Storage location key",
+saved_reports,download_url,varchar,Yes,,"URL to download PDF",
+saved_reports,lookup_id,varchar,No,,"Related vehicle lookup ID (FK to vehicle_lookups.id)",
+saved_reports,download_count,integer,Yes,0,"Number of times downloaded",
+saved_reports,expires_at,timestamp,No,,"When report expires",
+saved_reports,created_at,timestamp,Yes,now(),"Report creation timestamp",idx_saved_reports_created_at
+shared_reports,id,varchar,Yes,gen_random_uuid(),"Unique share ID (UUID)",PRIMARY KEY
+shared_reports,share_code,varchar,Yes,,"Unique share code for public access (unique)",
+shared_reports,lookup_id,varchar,Yes,,"Related vehicle lookup ID (FK to vehicle_lookups.id)",
+shared_reports,user_id,varchar,Yes,,"User who shared report (FK to users.id)",
+shared_reports,expires_at,timestamp,No,,"When share expires",
+shared_reports,view_count,integer,Yes,0,"Number of times viewed",
+shared_reports,created_at,timestamp,Yes,now(),"Share creation timestamp",
+analytics,id,varchar,Yes,gen_random_uuid(),"Unique analytics ID (UUID)",PRIMARY KEY
+analytics,event_type,varchar,Yes,,"Event type ('page_view', 'lookup', 'download', 'share', etc.)",idx_analytics_event_type
+analytics,user_id,varchar,No,,"User who triggered event (FK to users.id)",idx_analytics_user_id
+analytics,session_id,varchar,No,,"Session identifier",idx_analytics_session_id
+analytics,page,varchar,No,,"Page where event occurred",
+analytics,referrer,varchar,No,,"Referrer URL",
+analytics,user_agent,text,No,,"Browser user agent",
+analytics,ip_address,varchar,No,,"IP address",
+analytics,metadata,jsonb,Yes,{},"Additional event data (JSON)",
+analytics,created_at,timestamp,Yes,now(),"Event timestamp",idx_analytics_created_at
+api_usage,id,varchar,Yes,gen_random_uuid(),"Unique usage ID (UUID)",PRIMARY KEY
+api_usage,user_id,varchar,No,,"User who made API call (FK to users.id)",idx_api_usage_user_id
+api_usage,endpoint,varchar,Yes,,"API endpoint called",idx_api_usage_endpoint
+api_usage,method,varchar,Yes,,"HTTP method ('GET', 'POST', etc.)",
+api_usage,status_code,integer,Yes,,"HTTP status code",idx_api_usage_status_code
+api_usage,response_time,integer,Yes,,"Response time in milliseconds",
+api_usage,request_size,integer,No,,"Request size in bytes",
+api_usage,response_size,integer,No,,"Response size in bytes",
+api_usage,ip_address,varchar,No,,"IP address of request",
+api_usage,user_agent,text,No,,"Browser user agent",
+api_usage,created_at,timestamp,Yes,now(),"Request timestamp",idx_api_usage_created_at
+system_config,id,varchar,Yes,gen_random_uuid(),"Unique config ID (UUID)",PRIMARY KEY
+system_config,key,varchar,Yes,,"Configuration key (unique)",idx_system_config_key
+system_config,value,jsonb,Yes,,"Configuration value (JSON)",
+system_config,description,text,No,,"Configuration description",
+system_config,is_public,boolean,Yes,false,"Whether config is public",idx_system_config_is_public
+system_config,updated_by,varchar,No,,"User who last updated (FK to users.id)",
+system_config,created_at,timestamp,Yes,now(),"Creation timestamp",
+system_config,updated_at,timestamp,Yes,now(),"Last update timestamp",
+sessions,sid,varchar,Yes,,"Session ID",PRIMARY KEY
+sessions,sess,jsonb,Yes,,"Session data (JSON)",
+sessions,expire,timestamp,Yes,,"Session expiration",IDX_session_expire
+
