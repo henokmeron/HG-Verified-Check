@@ -306,9 +306,22 @@ app.get('/auth/google', async (req: any, res: any, _next: any) => {
 });
 
 // Register callback route - MUST be before any other route handlers that might match
+// CRITICAL: This route MUST execute - if it doesn't, we'll show an error page
 app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   console.log('🔍 /auth/google/callback route hit!');
   console.log('✅ Callback handler is executing!');
+  console.log('🔍 FULL REQUEST INFO:', {
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    url: req.url,
+    query: req.query,
+    headers: {
+      host: req.headers.host,
+      referer: req.headers.referer,
+      'user-agent': req.headers['user-agent']
+    }
+  });
   console.log('📋 Query params:', req.query);
   console.log('📋 Has code:', !!req.query.code);
   console.log('📋 Has error:', !!req.query.error);
@@ -372,13 +385,63 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
       if (err) {
         console.error('❌ OAuth authentication error:', err);
         console.error('❌ Error stack:', err.stack);
-        return res.redirect('/login?error=oauth_failed');
+        // Show error page instead of redirecting to prevent loops
+        return res.status(500).send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>OAuth Authentication Failed</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+              .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+              h1 { color: #ef4444; margin-bottom: 20px; }
+              p { color: #6b7280; margin-bottom: 20px; }
+              .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
+              .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="error-box">
+              <h1>❌ OAuth Authentication Failed</h1>
+              <p>There was an error authenticating with Google.</p>
+              <div class="error-details">
+                <strong>Error:</strong> ${err?.message || 'Unknown error'}<br>
+                <strong>Please check Vercel logs for more details.</strong>
+              </div>
+              <a href="/" class="button">Return to Homepage</a>
+            </div>
+          </body>
+          </html>
+        `);
       }
       
       if (!req.user) {
         console.error('❌ No user after OAuth authentication');
         console.error('❌ This usually means the GoogleStrategy callback failed');
-        return res.redirect('/login?error=no_user');
+        // Show error page instead of redirecting to prevent loops
+        return res.status(500).send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>User Not Found</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+              .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+              h1 { color: #ef4444; margin-bottom: 20px; }
+              p { color: #6b7280; margin-bottom: 20px; }
+              .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="error-box">
+              <h1>❌ User Not Found</h1>
+              <p>The GoogleStrategy callback failed to create or find your user account.</p>
+              <p>This might be a database issue. Please check Vercel logs.</p>
+              <a href="/" class="button">Return to Homepage</a>
+            </div>
+          </body>
+          </html>
+        `);
       }
       
       console.log('✅ User authenticated, logging in...');
