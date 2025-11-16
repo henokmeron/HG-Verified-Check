@@ -313,34 +313,61 @@ export async function ensureTablesExist(): Promise<boolean> {
     console.log(`📋 Prepared ${statements.length} migration statements to execute`);
 
     // Execute all statements in a transaction
+    console.log('🔄 Connecting to database for migration...');
     const client = await pool.connect();
+    console.log('✅ Database connection established');
+    
     try {
       console.log('🔄 Starting database migration transaction...');
       await client.query('BEGIN');
+      console.log('✅ Transaction started');
       
       let statementCount = 0;
+      let successCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      
       for (const statement of statements) {
         if (statement.trim() && !statement.trim().startsWith('--')) {
           statementCount++;
           const statementPreview = statement.substring(0, 100).replace(/\n/g, ' ');
-          console.log(`🔄 Executing migration statement ${statementCount}/${statements.length}: ${statementPreview}...`);
+          console.log(`🔄 [${statementCount}/${statements.length}] Executing: ${statementPreview}...`);
           try {
-            await client.query(statement);
+            const result = await client.query(statement);
+            console.log(`✅ [${statementCount}] Statement executed successfully`);
+            successCount++;
           } catch (stmtError: any) {
             // If statement fails but it's because object already exists, that's okay
             const errorMsg = stmtError?.message || '';
-            if (errorMsg.includes('already exists') || errorMsg.includes('duplicate') || stmtError?.code === '42P07') {
-              console.log(`⚠️ Statement ${statementCount} skipped (already exists): ${statementPreview}`);
+            const errorCode = stmtError?.code || '';
+            console.log(`⚠️ [${statementCount}] Statement error: ${errorMsg} (code: ${errorCode})`);
+            
+            if (errorMsg.includes('already exists') || errorMsg.includes('duplicate') || errorCode === '42P07') {
+              console.log(`⚠️ [${statementCount}] Skipped (already exists): ${statementPreview}`);
+              skippedCount++;
             } else {
-              throw stmtError; // Re-throw if it's a real error
+              console.error(`❌ [${statementCount}] Statement failed: ${errorMsg}`);
+              console.error(`❌ [${statementCount}] Error code: ${errorCode}`);
+              console.error(`❌ [${statementCount}] Error detail: ${stmtError?.detail || 'none'}`);
+              errorCount++;
+              // Don't throw - continue with other statements
+              // We'll verify at the end if tables exist
             }
           }
         }
       }
       
-      console.log(`✅ Executed ${statementCount} migration statements, committing...`);
-      await client.query('COMMIT');
-      console.log('✅ Database migrations completed successfully');
+      console.log(`📊 Migration summary: ${successCount} succeeded, ${skippedCount} skipped, ${errorCount} errors out of ${statementCount} statements`);
+      
+      // Commit transaction even if some statements had errors (they might be "already exists" errors)
+      console.log(`🔄 Committing transaction...`);
+      try {
+        await client.query('COMMIT');
+        console.log('✅ Transaction committed successfully');
+      } catch (commitError: any) {
+        console.error('❌ Error committing transaction:', commitError?.message);
+        throw commitError;
+      }
       
       // CRITICAL: Verify tables were created before marking as complete
       const verifyResult = await client.query(`
