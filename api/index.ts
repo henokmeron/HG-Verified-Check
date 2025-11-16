@@ -368,108 +368,40 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
       // Continue with migration check as fallback
     }
     
-    // If tables don't exist, try to run migrations (but don't wait forever)
-    // CRITICAL: Add timeout to prevent function timeout (Vercel has 60s limit)
+    // CRITICAL: Don't try to run migrations in the OAuth callback - they run on startup
+    // If tables don't exist, migrations are either still running or failed
+    // Just check once more with a quick timeout, then show error
     if (!tablesExist) {
-      console.log('📦 Tables not found - attempting to run migrations with timeout...');
-      const MIGRATION_TIMEOUT = 10000; // 10 seconds max - fail fast to avoid function timeout
-      const startTime = Date.now();
+      console.log('📦 Tables not found - migrations should run on startup');
+      console.log('📦 Re-checking once more (might have been created by startup migration)...');
       
-      let migrationsComplete = false;
-      let retries = 0;
-      const maxRetries = 3; // Reduced to fail faster
-      
-      while (!migrationsComplete && retries < maxRetries) {
-        // Check if we've exceeded timeout
-        if (Date.now() - startTime > MIGRATION_TIMEOUT) {
-          console.error(`❌ Migration check timed out after ${MIGRATION_TIMEOUT}ms`);
-          break;
-        }
-        
-        // Try to run migrations with a timeout
-        try {
-          migrationsComplete = await Promise.race([
-            ensureMigrationsRun(),
-            new Promise<boolean>((resolve) => {
-              setTimeout(() => {
-                console.log('⏱️ Migration check timed out (5s)');
-                resolve(false);
-              }, 5000); // 5 second timeout per attempt
+      // One quick re-check in case startup migration just finished
+      try {
+        // @ts-ignore
+        const { pool } = await import('../dist/server/db.js');
+        if (pool) {
+          const recheckResult = await Promise.race([
+            pool.query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'users'
+              );
+            `),
+            new Promise<any>((resolve) => {
+              setTimeout(() => resolve({ rows: [{ exists: false }] }), 2000);
             })
           ]);
-        } catch (error: any) {
-          console.error('❌ Migration check error:', error?.message);
-          migrationsComplete = false;
-        }
-        
-        if (!migrationsComplete) {
-          retries++;
-          console.log(`⏳ Migrations not complete yet, waiting... (attempt ${retries}/${maxRetries})`);
-          
-          // Check if we've exceeded total timeout
-          if (Date.now() - startTime > MIGRATION_TIMEOUT) {
-            console.error(`❌ Migration check exceeded total timeout of ${MIGRATION_TIMEOUT}ms`);
-            break;
-          }
-          
-          // Wait 500ms before retrying (but check timeout)
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Re-check if tables exist (might have been created by another instance)
-          try {
-            // @ts-ignore
-            const { pool } = await import('../dist/server/db.js');
-            if (pool) {
-              const recheckResult = await Promise.race([
-                pool.query(`
-                  SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'users'
-                  );
-                `),
-                new Promise<any>((resolve) => {
-                  setTimeout(() => resolve({ rows: [{ exists: false }] }), 2000);
-                })
-              ]);
-              if (recheckResult.rows[0]?.exists) {
-                console.log('✅ Tables now exist (created by another instance)');
-                tablesExist = true;
-                break; // Exit retry loop
-              }
-            }
-          } catch (e) {
-            // Ignore recheck errors
-          }
-        } else {
-          // Migration completed, verify tables exist
-          try {
-            // @ts-ignore
-            const { pool } = await import('../dist/server/db.js');
-            if (pool) {
-              const verifyResult = await Promise.race([
-                pool.query(`
-                  SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_schema = 'public' 
-                    AND table_name = 'users'
-                  );
-                `),
-                new Promise<any>((resolve) => {
-                  setTimeout(() => resolve({ rows: [{ exists: false }] }), 2000);
-                })
-              ]);
-              if (verifyResult.rows[0]?.exists) {
-                tablesExist = true;
-              }
-            }
-          } catch (e) {
-            // Ignore verification errors
+          if (recheckResult.rows[0]?.exists) {
+            console.log('✅ Tables now exist (created by startup migration)');
+            tablesExist = true;
           }
         }
+      } catch (e: any) {
+        console.error('❌ Re-check error:', e?.message);
       }
       
-      // Final check: if tables still don't exist after retries/timeout, show error
+      // If tables still don't exist, show error immediately
       if (!tablesExist) {
         // One final direct check with timeout
         try {
