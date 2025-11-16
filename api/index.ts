@@ -39,7 +39,9 @@ if (process.env.DATABASE_URL) {
       connectionString: process.env.DATABASE_URL,
       max: 5, // Smaller pool for serverless
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000, // Shorter timeout for serverless
+      connectionTimeoutMillis: 20000, // Increased timeout for serverless (20s)
+      // Serverless-friendly settings
+      allowExitOnIdle: true, // Allow pool to close when idle
     });
     
     // Add error handlers to prevent crashes from pool errors
@@ -52,9 +54,37 @@ if (process.env.DATABASE_URL) {
     
     sessionStore = new PGStore({
       pool: pool,
-      tableName: 'user_sessions', // Table name for sessions
+      tableName: 'sessions', // Use 'sessions' table (matches our migration)
       createTableIfMissing: true, // Auto-create table if it doesn't exist
+      // CRITICAL: Disable automatic session pruning in serverless
+      // Pruning causes connection timeouts and is not needed in serverless
+      // Sessions will expire naturally based on cookie maxAge
+      pruneSessionInterval: false, // Disable automatic pruning
     });
+    
+    // Override pruneSessions method to handle errors gracefully
+    if (sessionStore && typeof sessionStore.pruneSessions === 'function') {
+      const originalPruneSessions = sessionStore.pruneSessions.bind(sessionStore);
+      sessionStore.pruneSessions = async function() {
+        try {
+          // Only prune if we have an active connection
+          if (pool.totalCount > 0) {
+            await Promise.race([
+              originalPruneSessions(),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Prune timeout')), 5000)
+              )
+            ]);
+          }
+        } catch (error: any) {
+          // Silently ignore prune errors - they're not critical
+          const errorMessage = error?.message || error?.toString() || 'Unknown prune error';
+          if (!errorMessage.includes('timeout') && !errorMessage.includes('Connection terminated')) {
+            console.warn('⚠️ Session prune warning (non-fatal):', errorMessage);
+          }
+        }
+      };
+    }
     console.log('✅ Using database-backed session store');
   } catch (error: any) {
     // Handle errors gracefully - don't crash the function
