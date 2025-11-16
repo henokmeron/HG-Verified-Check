@@ -94,19 +94,6 @@ CREATE TABLE IF NOT EXISTS "shared_reports" (
 	"created_at" timestamp DEFAULT now(),
 	CONSTRAINT "shared_reports_share_code_unique" UNIQUE("share_code")
 );
-CREATE TABLE IF NOT EXISTS "users" (
-	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"email" varchar,
-	"first_name" varchar,
-	"last_name" varchar,
-	"profile_image_url" varchar,
-	"credit_balance" integer DEFAULT 0 NOT NULL,
-	"stripe_customer_id" varchar,
-	"role" varchar DEFAULT 'user' NOT NULL,
-	"created_at" timestamp DEFAULT now(),
-	"updated_at" timestamp DEFAULT now(),
-	CONSTRAINT "users_email_unique" UNIQUE("email")
-);
 CREATE TABLE IF NOT EXISTS "vehicle_lookups" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" varchar NOT NULL,
@@ -175,6 +162,63 @@ CREATE INDEX IF NOT EXISTS "idx_api_usage_user_id" ON "api_usage" ("user_id");
 CREATE INDEX IF NOT EXISTS "idx_api_usage_endpoint" ON "api_usage" ("endpoint");
 CREATE INDEX IF NOT EXISTS "idx_api_usage_created_at" ON "api_usage" ("created_at");
 CREATE INDEX IF NOT EXISTS "idx_api_usage_status_code" ON "api_usage" ("status_code");
+
+-- Add missing columns to users table if they don't exist (for existing tables created with incomplete schema)
+DO \$\$
+BEGIN
+  -- Add is_active column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'is_active') THEN
+    ALTER TABLE "users" ADD COLUMN "is_active" boolean DEFAULT true NOT NULL;
+  END IF;
+  
+  -- Add last_login_at column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'last_login_at') THEN
+    ALTER TABLE "users" ADD COLUMN "last_login_at" timestamp;
+  END IF;
+  
+  -- Add preferences column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'preferences') THEN
+    ALTER TABLE "users" ADD COLUMN "preferences" jsonb DEFAULT '{}';
+  END IF;
+  
+  -- Add auth_provider column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'auth_provider') THEN
+    ALTER TABLE "users" ADD COLUMN "auth_provider" varchar DEFAULT 'local' NOT NULL;
+  END IF;
+  
+  -- Add provider_id column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'provider_id') THEN
+    ALTER TABLE "users" ADD COLUMN "provider_id" varchar;
+  END IF;
+  
+  -- Add password_hash column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'password_hash') THEN
+    ALTER TABLE "users" ADD COLUMN "password_hash" text;
+  END IF;
+  
+  -- Add email_verified column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email_verified') THEN
+    ALTER TABLE "users" ADD COLUMN "email_verified" boolean DEFAULT false NOT NULL;
+  END IF;
+  
+  -- Add mfa_enabled column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'mfa_enabled') THEN
+    ALTER TABLE "users" ADD COLUMN "mfa_enabled" boolean DEFAULT false NOT NULL;
+  END IF;
+  
+  -- Add last_login_ip column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'last_login_ip') THEN
+    ALTER TABLE "users" ADD COLUMN "last_login_ip" varchar;
+  END IF;
+  
+  -- Ensure email is NOT NULL if it's nullable (for existing incomplete tables)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email' AND is_nullable = 'YES') THEN
+    -- First, set NULL emails to empty string for existing rows
+    UPDATE "users" SET "email" = '' WHERE "email" IS NULL;
+    -- Then make it NOT NULL
+    ALTER TABLE "users" ALTER COLUMN "email" SET NOT NULL;
+  END IF;
+END \$\$;
 
 DO \$\$
 BEGIN
