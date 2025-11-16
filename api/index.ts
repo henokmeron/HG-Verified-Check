@@ -564,7 +564,7 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
     passport.authenticate('google', { 
       failureRedirect: '/login?error=google_failed', // Always redirect to /login, never back to /auth/google
       session: true // Ensure session is used
-    })(req, res, (err: any) => {
+    })(req, res, async (err: any) => {
       console.log('🔍 Passport authenticate callback invoked');
       console.log('📋 Error:', err ? err.message : 'none');
       console.log('📋 Has user:', !!req.user);
@@ -687,11 +687,25 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
       }
       (req.session as any).passport.user = req.user.id;
       console.log('🔐 Manually set passport.user in session:', req.user.id);
-      console.log('🔐 Session after manual passport set:', {
-        sessionId: req.session?.id,
-        hasPassport: !!(req.session as any)?.passport,
-        passportUser: (req.session as any)?.passport?.user,
-        sessionKeys: req.session ? Object.keys(req.session) : []
+      
+      // CRITICAL: Save session immediately after setting passport data
+      // This ensures the data is persisted before req.login
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((saveErr: any) => {
+          if (saveErr) {
+            console.error('❌ Error saving session after setting passport data:', saveErr);
+            reject(saveErr);
+          } else {
+            console.log('✅ Session saved after setting passport data');
+            console.log('🔐 Session after manual passport set and save:', {
+              sessionId: req.session?.id,
+              hasPassport: !!(req.session as any)?.passport,
+              passportUser: (req.session as any)?.passport?.user,
+              sessionKeys: req.session ? Object.keys(req.session) : []
+            });
+            resolve();
+          }
+        });
       });
       
       req.login(req.user, { session: true }, (loginErr: any) => {
