@@ -382,6 +382,20 @@ export async function ensureTablesExist(): Promise<boolean> {
             const errorCode = stmtError?.code || '';
             console.log(`⚠️ [${statementCount}] Statement error: ${errorMsg} (code: ${errorCode})`);
             
+            // CRITICAL: If transaction is aborted (25P02), we need to rollback and retry
+            if (errorCode === '25P02') {
+              console.error(`❌ [${statementCount}] Transaction aborted - previous statement failed`);
+              console.error(`❌ [${statementCount}] Need to rollback and retry migration`);
+              // Rollback and throw to retry the entire migration
+              try {
+                await client.query('ROLLBACK');
+                console.log('✅ Rolled back transaction due to abort');
+              } catch (rollbackErr) {
+                console.error('❌ Rollback failed:', rollbackErr);
+              }
+              throw new Error(`Migration failed: transaction aborted at statement ${statementCount}. Previous statement: ${errorMsg}`);
+            }
+            
             if (errorMsg.includes('already exists') || errorMsg.includes('duplicate') || errorCode === '42P07') {
               console.log(`⚠️ [${statementCount}] Skipped (already exists): ${statementPreview}`);
               skippedCount++;
@@ -390,8 +404,12 @@ export async function ensureTablesExist(): Promise<boolean> {
               console.error(`❌ [${statementCount}] Error code: ${errorCode}`);
               console.error(`❌ [${statementCount}] Error detail: ${stmtError?.detail || 'none'}`);
               errorCount++;
-              // Don't throw - continue with other statements
-              // We'll verify at the end if tables exist
+              // For non-critical errors, continue but we'll verify tables at the end
+              // For critical errors (like missing table), throw to abort transaction
+              if (errorMsg.includes('does not exist') && errorCode === '42P01') {
+                console.error(`❌ [${statementCount}] CRITICAL: Table does not exist - this should not happen if statements are ordered correctly`);
+                // Don't throw here - let it continue and we'll check at the end
+              }
             }
           }
         }

@@ -790,36 +790,58 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 // Run database migrations on startup (CRITICAL: Must complete before handling requests)
 // In serverless, we need to ensure migrations run before any database queries
 let migrationPromise: Promise<boolean> | null = null;
+let migrationAttempts = 0;
+const MAX_MIGRATION_ATTEMPTS = 3;
 
 async function ensureMigrationsRun(): Promise<boolean> {
+  // If migration already succeeded, return immediately
   if (migrationPromise) {
-    console.log('📦 Migration already running, waiting for existing promise...');
-    return migrationPromise; // Return existing promise if already running
+    try {
+      const result = await migrationPromise;
+      if (result) {
+        console.log('📦 Migration already completed successfully (cached)');
+        return true;
+      }
+      // If previous attempt failed, allow retry if under max attempts
+      if (migrationAttempts >= MAX_MIGRATION_ATTEMPTS) {
+        console.error(`❌ Migration failed ${migrationAttempts} times, not retrying`);
+        return false;
+      }
+      console.log(`📦 Previous migration attempt failed, starting new attempt (${migrationAttempts + 1}/${MAX_MIGRATION_ATTEMPTS})...`);
+      // Reset promise to allow retry
+      migrationPromise = null;
+    } catch (error) {
+      // Previous promise failed, reset it
+      console.log('📦 Previous migration promise failed, resetting for retry...');
+      migrationPromise = null;
+    }
   }
+  
+  migrationAttempts++;
+  console.log(`📦 Starting migration attempt ${migrationAttempts}/${MAX_MIGRATION_ATTEMPTS}...`);
+  console.log('📋 DATABASE_URL available:', !!process.env.DATABASE_URL);
   
   migrationPromise = (async () => {
     try {
-      console.log('📦 Starting migration check...');
-      console.log('📋 DATABASE_URL available:', !!process.env.DATABASE_URL);
-      
       // @ts-ignore - dist files are generated at build time
       const { ensureTablesExist } = await import('../dist/server/migrate.js');
       console.log('📦 Migration function imported, calling ensureTablesExist()...');
       
       const result = await ensureTablesExist();
       
-      console.log('📦 Migration function returned:', result);
+      console.log(`📦 Migration attempt ${migrationAttempts} returned:`, result);
       
       if (result) {
         console.log('✅ Database migrations completed successfully');
+        migrationAttempts = 0; // Reset counter on success
       } else {
-        console.error('❌ Database migrations did NOT complete - ensureTablesExist() returned false');
+        console.error(`❌ Migration attempt ${migrationAttempts} did NOT complete - ensureTablesExist() returned false`);
         console.error('❌ Check the migration logs above for detailed error information');
       }
       return result;
     } catch (error: any) {
       const errorMessage = error?.message || error?.toString() || 'Unknown error';
-      console.error('❌ Migration check failed with exception:', errorMessage);
+      console.error(`❌ Migration attempt ${migrationAttempts} failed with exception:`, errorMessage);
       console.error('❌ Error code:', error?.code);
       console.error('❌ Error stack:', error?.stack);
       return false;
