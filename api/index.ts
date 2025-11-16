@@ -369,18 +369,50 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
     }
     
     // If tables don't exist, try to run migrations (but don't wait forever)
+    // CRITICAL: Add timeout to prevent function timeout (Vercel has 60s limit)
     if (!tablesExist) {
-      console.log('📦 Tables not found - attempting to run migrations...');
+      console.log('📦 Tables not found - attempting to run migrations with timeout...');
+      const MIGRATION_TIMEOUT = 10000; // 10 seconds max - fail fast to avoid function timeout
+      const startTime = Date.now();
+      
       let migrationsComplete = false;
       let retries = 0;
-      const maxRetries = 5; // Reduced from 10 to fail faster
+      const maxRetries = 3; // Reduced to fail faster
       
       while (!migrationsComplete && retries < maxRetries) {
-        migrationsComplete = await ensureMigrationsRun();
+        // Check if we've exceeded timeout
+        if (Date.now() - startTime > MIGRATION_TIMEOUT) {
+          console.error(`❌ Migration check timed out after ${MIGRATION_TIMEOUT}ms`);
+          break;
+        }
+        
+        // Try to run migrations with a timeout
+        try {
+          migrationsComplete = await Promise.race([
+            ensureMigrationsRun(),
+            new Promise<boolean>((resolve) => {
+              setTimeout(() => {
+                console.log('⏱️ Migration check timed out (5s)');
+                resolve(false);
+              }, 5000); // 5 second timeout per attempt
+            })
+          ]);
+        } catch (error: any) {
+          console.error('❌ Migration check error:', error?.message);
+          migrationsComplete = false;
+        }
+        
         if (!migrationsComplete) {
           retries++;
           console.log(`⏳ Migrations not complete yet, waiting... (attempt ${retries}/${maxRetries})`);
-          // Wait 500ms before retrying
+          
+          // Check if we've exceeded total timeout
+          if (Date.now() - startTime > MIGRATION_TIMEOUT) {
+            console.error(`❌ Migration check exceeded total timeout of ${MIGRATION_TIMEOUT}ms`);
+            break;
+          }
+          
+          // Wait 500ms before retrying (but check timeout)
           await new Promise(resolve => setTimeout(resolve, 500));
           
           // Re-check if tables exist (might have been created by another instance)
@@ -388,13 +420,18 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
             // @ts-ignore
             const { pool } = await import('../dist/server/db.js');
             if (pool) {
-              const recheckResult = await pool.query(`
-                SELECT EXISTS (
-                  SELECT FROM information_schema.tables 
-                  WHERE table_schema = 'public' 
-                  AND table_name = 'users'
-                );
-              `);
+              const recheckResult = await Promise.race([
+                pool.query(`
+                  SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'users'
+                  );
+                `),
+                new Promise<any>((resolve) => {
+                  setTimeout(() => resolve({ rows: [{ exists: false }] }), 2000);
+                })
+              ]);
               if (recheckResult.rows[0]?.exists) {
                 console.log('✅ Tables now exist (created by another instance)');
                 tablesExist = true;
@@ -404,27 +441,92 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
           } catch (e) {
             // Ignore recheck errors
           }
+        } else {
+          // Migration completed, verify tables exist
+          try {
+            // @ts-ignore
+            const { pool } = await import('../dist/server/db.js');
+            if (pool) {
+              const verifyResult = await Promise.race([
+                pool.query(`
+                  SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'users'
+                  );
+                `),
+                new Promise<any>((resolve) => {
+                  setTimeout(() => resolve({ rows: [{ exists: false }] }), 2000);
+                })
+              ]);
+              if (verifyResult.rows[0]?.exists) {
+                tablesExist = true;
+              }
+            }
+          } catch (e) {
+            // Ignore verification errors
+          }
         }
       }
       
-      // Final check: if tables still don't exist after retries, show error
-      if (!tablesExist && !migrationsComplete) {
-        // One final direct check
+      // Final check: if tables still don't exist after retries/timeout, show error
+      if (!tablesExist) {
+        // One final direct check with timeout
         try {
           // @ts-ignore
           const { pool } = await import('../dist/server/db.js');
           if (pool) {
-            const finalCheck = await pool.query(`
-              SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = 'users'
-              );
-            `);
+            const finalCheck = await Promise.race([
+              pool.query(`
+                SELECT EXISTS (
+                  SELECT FROM information_schema.tables 
+                  WHERE table_schema = 'public' 
+                  AND table_name = 'users'
+                );
+              `),
+              new Promise<any>((resolve) => {
+                setTimeout(() => resolve({ rows: [{ exists: false }] }), 2000);
+              })
+            ]);
             tablesExist = finalCheck.rows[0]?.exists || false;
           }
-        } catch (e) {
-          // Ignore
+        } catch (e: any) {
+          console.error('❌ Final table check failed:', e?.message);
+          // If it's an auth error, provide specific instructions
+          if (e?.message?.includes('password authentication failed') || e?.message?.includes('authentication failed')) {
+            return res.status(500).send(`
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>Database Authentication Error</title>
+                <style>
+                  body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+                  .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                  h1 { color: #ef4444; margin-bottom: 20px; }
+                  p { color: #6b7280; margin-bottom: 20px; line-height: 1.6; }
+                  .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
+                  .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+                </style>
+              </head>
+              <body>
+                <div class="error-box">
+                  <h1>❌ Database Authentication Failed</h1>
+                  <p>The DATABASE_URL in Vercel has an incorrect password.</p>
+                  <div class="error-details">
+                    <strong>To Fix:</strong><br>
+                    1. Go to Neon Console: https://console.neon.tech<br>
+                    2. Get the correct connection string<br>
+                    3. Update DATABASE_URL in Vercel → Settings → Environment Variables<br>
+                    4. Redeploy your project<br>
+                    <br>
+                    <strong>See FIX-DATABASE-AUTHENTICATION.md for detailed steps</strong>
+                  </div>
+                  <a href="/" class="button">Return to Homepage</a>
+                </div>
+              </body>
+              </html>
+            `);
+          }
         }
         
         if (!tablesExist) {
@@ -438,15 +540,27 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
                 body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
                 .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
                 h1 { color: #ef4444; margin-bottom: 20px; }
-                p { color: #6b7280; margin-bottom: 20px; }
+                p { color: #6b7280; margin-bottom: 20px; line-height: 1.6; }
+                .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
                 .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
               </style>
             </head>
             <body>
               <div class="error-box">
                 <h1>❌ Database Not Ready</h1>
-                <p>Database tables are not initialized. Please wait a moment and try again.</p>
-                <p>If this persists, check your DATABASE_URL configuration in Vercel.</p>
+                <p>Database tables are not initialized. The migration process timed out or failed.</p>
+                <div class="error-details">
+                  <strong>Possible causes:</strong><br>
+                  • DATABASE_URL is incorrect (check authentication)<br>
+                  • Database connection is slow or timing out<br>
+                  • Migration process is stuck<br>
+                  <br>
+                  <strong>To Fix:</strong><br>
+                  1. Check Vercel logs for detailed error messages<br>
+                  2. Verify DATABASE_URL in Vercel → Settings → Environment Variables<br>
+                  3. Try running migrations manually in Neon Console<br>
+                  4. Wait a few minutes and try again
+                </div>
                 <a href="/" class="button">Return to Homepage</a>
               </div>
             </body>
