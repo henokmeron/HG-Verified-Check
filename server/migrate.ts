@@ -256,10 +256,40 @@ export async function ensureTablesExist(): Promise<boolean> {
       console.log('✅ Table existence check completed');
       console.log('📋 Check result:', checkResult?.rows?.[0]);
     } catch (checkError: any) {
-      console.error('❌ Error checking for users table:', checkError?.message);
-      console.error('❌ Error code:', checkError?.code);
+      const errorMessage = checkError?.message || checkError?.toString() || 'Unknown error';
+      const errorCode = checkError?.code || '';
+      console.error('❌ Error checking for users table:', errorMessage);
+      console.error('❌ Error code:', errorCode);
       console.error('❌ Error detail:', checkError?.detail);
       console.error('❌ Error stack:', checkError?.stack);
+      
+      // CRITICAL: If authentication fails, provide clear instructions and stop
+      if (errorMessage.includes('password authentication failed') || errorMessage.includes('authentication failed')) {
+        console.error('');
+        console.error('🔴 ============================================');
+        console.error('🔴 DATABASE AUTHENTICATION ERROR');
+        console.error('🔴 ============================================');
+        console.error('❌ The DATABASE_URL in Vercel has an incorrect password.');
+        console.error('');
+        console.error('✅ TO FIX:');
+        console.error('1. Go to Neon Console: https://console.neon.tech');
+        console.error('2. Select your database project');
+        console.error('3. Click "Connection Details" or "Connection String"');
+        console.error('4. Copy the ENTIRE connection string');
+        console.error('5. Go to Vercel → Settings → Environment Variables');
+        console.error('6. Find DATABASE_URL and update it with the correct connection string');
+        console.error('7. Make sure it\'s set for Production environment');
+        console.error('8. Redeploy your project');
+        console.error('');
+        console.error('📖 See FIX-DATABASE-AUTHENTICATION.md for detailed steps');
+        console.error('🔴 ============================================');
+        console.error('');
+        
+        // Don't proceed with migration if authentication fails
+        await pool.end();
+        return false;
+      }
+      
       // If we can't even check, the database might not be accessible
       // But we'll still try to run migrations in case it's a temporary issue
       console.log('⚠️ Could not check table existence, proceeding with migration attempt...');
