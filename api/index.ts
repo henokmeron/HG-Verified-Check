@@ -460,6 +460,12 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
     
     await ensurePassportConfigured();
     console.log('✅ Passport configured, starting authentication...');
+    console.log('🔍 About to call passport.authenticate...');
+    console.log('🔍 Request session before authenticate:', {
+      sessionId: req.session?.id,
+      sessionKeys: req.session ? Object.keys(req.session) : [],
+      hasPassport: !!(req.session as any)?.passport
+    });
     
     // Use Passport authenticate with proper error handling
     // CRITICAL: Never redirect back to /auth/google to prevent loops
@@ -470,6 +476,13 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
       console.log('🔍 Passport authenticate callback invoked');
       console.log('📋 Error:', err ? err.message : 'none');
       console.log('📋 Has user:', !!req.user);
+      console.log('📋 User details:', req.user ? { id: req.user.id, email: req.user.email } : 'none');
+      console.log('🔍 Request session in callback:', {
+        sessionId: req.session?.id,
+        sessionKeys: req.session ? Object.keys(req.session) : [],
+        hasPassport: !!(req.session as any)?.passport,
+        passportUser: (req.session as any)?.passport?.user
+      });
       
       if (err) {
         console.error('❌ OAuth authentication error:', err);
