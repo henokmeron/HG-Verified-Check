@@ -219,11 +219,6 @@ export async function ensureTablesExist(): Promise<boolean> {
     return true;
   }
 
-  if (!process.env.DATABASE_URL) {
-    console.warn('⚠️ DATABASE_URL not set - skipping migrations');
-    return false;
-  }
-
   // CRITICAL: Log DATABASE_URL status (without exposing the actual URL)
   if (!process.env.DATABASE_URL) {
     console.error('❌ DATABASE_URL environment variable is NOT SET!');
