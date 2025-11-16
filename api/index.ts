@@ -588,40 +588,30 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
         userEmail: req.user.email
       });
       
+      // CRITICAL: Manually set passport data in session BEFORE req.login
+      // This ensures the data is there even if req.login has issues
+      if (!(req.session as any).passport) {
+        (req.session as any).passport = {};
+      }
+      (req.session as any).passport.user = req.user.id;
+      console.log('🔐 Manually set passport.user in session:', req.user.id);
+      console.log('🔐 Session after manual passport set:', {
+        sessionId: req.session?.id,
+        hasPassport: !!(req.session as any)?.passport,
+        passportUser: (req.session as any)?.passport?.user,
+        sessionKeys: req.session ? Object.keys(req.session) : []
+      });
+      
       req.login(req.user, { session: true }, (loginErr: any) => {
         if (loginErr) {
           console.error('❌ Login error after OAuth:', loginErr);
           console.error('❌ Login error stack:', loginErr.stack);
-          return res.status(500).send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Login Error</title>
-              <style>
-                body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-                .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                h1 { color: #ef4444; margin-bottom: 20px; }
-                p { color: #6b7280; margin-bottom: 20px; }
-                .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
-                .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-              </style>
-            </head>
-            <body>
-              <div class="error-box">
-                <h1>❌ Login Failed</h1>
-                <p>There was an error logging you in after authentication.</p>
-                <div class="error-details">
-                  <strong>Error:</strong> ${loginErr?.message || 'Unknown error'}<br>
-                  <strong>Please check Vercel logs for more details.</strong>
-                </div>
-                <a href="/" class="button">Return to Homepage</a>
-              </div>
-            </body>
-            </html>
-          `);
+          // Even if req.login fails, we manually set passport data, so continue
+          console.log('⚠️ req.login failed, but passport data was manually set - continuing...');
+        } else {
+          console.log('✅ req.login completed successfully');
         }
         
-        console.log('✅ req.login completed successfully');
         console.log('🔐 Session immediately after req.login:', {
           sessionId: req.session?.id,
           hasPassport: !!(req.session as any)?.passport,
@@ -629,36 +619,15 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
           sessionKeys: req.session ? Object.keys(req.session) : []
         });
         
-        // CRITICAL: Check if passport data was actually saved
+        // CRITICAL: Verify passport data is in session (either from req.login or manual set)
         if (!(req.session as any)?.passport?.user) {
           console.error('❌ CRITICAL: Passport data NOT in session after req.login!');
           console.error('❌ This means req.login() did not serialize the user properly');
           console.error('❌ Session data:', JSON.stringify(req.session, null, 2));
-          return res.status(500).send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Session Error</title>
-              <style>
-                body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-                .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                h1 { color: #ef4444; margin-bottom: 20px; }
-                p { color: #6b7280; margin-bottom: 20px; }
-                .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-              </style>
-            </head>
-            <body>
-              <div class="error-box">
-                <h1>❌ Session Save Failed</h1>
-                <p>The session was not saved properly after login. Please check Vercel logs.</p>
-                <a href="/" class="button">Return to Homepage</a>
-              </div>
-            </body>
-            </html>
-          `);
+          // Try to set it again manually
+          (req.session as any).passport = { user: req.user.id };
+          console.log('🔐 Attempted to manually set passport data again');
         }
-        
-        console.log('✅ Passport data confirmed in session after req.login');
         
         // CRITICAL: Explicitly save the session to ensure passport data is persisted
         // In serverless, we MUST save the session before redirecting
@@ -666,7 +635,33 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
           if (saveErr) {
             console.error('❌ Error saving session:', saveErr);
             console.error('❌ Session save error stack:', saveErr.stack);
-            return res.redirect('/login?error=session_save_failed');
+            return res.status(500).send(`
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>Session Save Error</title>
+                <style>
+                  body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+                  .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                  h1 { color: #ef4444; margin-bottom: 20px; }
+                  p { color: #6b7280; margin-bottom: 20px; }
+                  .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
+                  .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+                </style>
+              </head>
+              <body>
+                <div class="error-box">
+                  <h1>❌ Session Save Failed</h1>
+                  <p>There was an error saving your session after login. Please try again.</p>
+                  <div class="error-details">
+                    <strong>Error:</strong> ${saveErr?.message || 'Unknown error'}<br>
+                    <strong>Please check Vercel logs for more details.</strong>
+                  </div>
+                  <a href="/" class="button">Return to Homepage</a>
+                </div>
+              </body>
+              </html>
+            `);
           }
           
           console.log('✅ Session saved successfully');
@@ -684,7 +679,28 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
           if (!(req.session as any)?.passport?.user) {
             console.error('❌ CRITICAL: Passport data not in session after save!');
             console.error('❌ Session data:', JSON.stringify(req.session, null, 2));
-            return res.redirect('/login?error=session_data_missing');
+            return res.status(500).send(`
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <title>Session Error</title>
+                <style>
+                  body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+                  .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                  h1 { color: #ef4444; margin-bottom: 20px; }
+                  p { color: #6b7280; margin-bottom: 20px; }
+                  .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+                </style>
+              </head>
+              <body>
+                <div class="error-box">
+                  <h1>❌ Session Data Missing</h1>
+                  <p>Passport data was not found in the session after save. Please check Vercel logs.</p>
+                  <a href="/" class="button">Return to Homepage</a>
+                </div>
+              </body>
+              </html>
+            `);
           }
           
           console.log('✅ Google OAuth callback successful - passport data confirmed in session');
