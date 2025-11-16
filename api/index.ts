@@ -553,6 +553,34 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
         firstName: req.user.firstName
       });
       
+      // CRITICAL: Verify user object before calling req.login
+      if (!req.user || !req.user.id) {
+        console.error('❌ CRITICAL: req.user is invalid before req.login!');
+        console.error('❌ req.user:', req.user);
+        return res.status(500).send(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Authentication Error</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+              .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+              h1 { color: #ef4444; margin-bottom: 20px; }
+              p { color: #6b7280; margin-bottom: 20px; }
+              .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="error-box">
+              <h1>❌ Invalid User Object</h1>
+              <p>The user object is invalid. Please check Vercel logs for details.</p>
+              <a href="/" class="button">Return to Homepage</a>
+            </div>
+          </body>
+          </html>
+        `);
+      }
+      
       // Log in the user (creates session)
       // CRITICAL: Use req.login with callback to ensure session is saved
       console.log('🔐 About to call req.login with user:', {
@@ -564,17 +592,73 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
         if (loginErr) {
           console.error('❌ Login error after OAuth:', loginErr);
           console.error('❌ Login error stack:', loginErr.stack);
-          return res.redirect('/login?error=login_failed');
+          return res.status(500).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Login Error</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+                .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                h1 { color: #ef4444; margin-bottom: 20px; }
+                p { color: #6b7280; margin-bottom: 20px; }
+                .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
+                .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+              </style>
+            </head>
+            <body>
+              <div class="error-box">
+                <h1>❌ Login Failed</h1>
+                <p>There was an error logging you in after authentication.</p>
+                <div class="error-details">
+                  <strong>Error:</strong> ${loginErr?.message || 'Unknown error'}<br>
+                  <strong>Please check Vercel logs for more details.</strong>
+                </div>
+                <a href="/" class="button">Return to Homepage</a>
+              </div>
+            </body>
+            </html>
+          `);
         }
         
-        console.log('✅ req.login completed, checking session...');
+        console.log('✅ req.login completed successfully');
         console.log('🔐 Session immediately after req.login:', {
           sessionId: req.session?.id,
           hasPassport: !!(req.session as any)?.passport,
           passportUser: (req.session as any)?.passport?.user,
-          sessionKeys: req.session ? Object.keys(req.session) : [],
-          fullSession: JSON.stringify(req.session, null, 2)
+          sessionKeys: req.session ? Object.keys(req.session) : []
         });
+        
+        // CRITICAL: Check if passport data was actually saved
+        if (!(req.session as any)?.passport?.user) {
+          console.error('❌ CRITICAL: Passport data NOT in session after req.login!');
+          console.error('❌ This means req.login() did not serialize the user properly');
+          console.error('❌ Session data:', JSON.stringify(req.session, null, 2));
+          return res.status(500).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Session Error</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
+                .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                h1 { color: #ef4444; margin-bottom: 20px; }
+                p { color: #6b7280; margin-bottom: 20px; }
+                .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
+              </style>
+            </head>
+            <body>
+              <div class="error-box">
+                <h1>❌ Session Save Failed</h1>
+                <p>The session was not saved properly after login. Please check Vercel logs.</p>
+                <a href="/" class="button">Return to Homepage</a>
+              </div>
+            </body>
+            </html>
+          `);
+        }
+        
+        console.log('✅ Passport data confirmed in session after req.login');
         
         // CRITICAL: Explicitly save the session to ensure passport data is persisted
         // In serverless, we MUST save the session before redirecting
