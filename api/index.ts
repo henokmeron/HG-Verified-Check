@@ -374,11 +374,14 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   }
   
   try {
-    // CRITICAL: Check if tables exist directly (faster than waiting for migration function)
-    // This allows us to proceed even if migration function is slow or timing out
-    console.log('📦 Checking if database tables exist...');
+    // CRITICAL: Wait for migrations to complete before proceeding
+    // This ensures tables exist before attempting authentication
+    console.log('📦 Waiting for database migrations to complete...');
     
     let tablesExist = false;
+    let migrationCompleted = false;
+    
+    // First, check if tables already exist
     try {
       // @ts-ignore
       const { pool } = await import('../dist/server/db.js');
@@ -391,53 +394,67 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
           );
         `);
         tablesExist = checkResult.rows[0]?.exists || false;
-        console.log(`📋 Tables exist check: ${tablesExist ? '✅ YES' : '❌ NO'}`);
+        console.log(`📋 Initial table check: ${tablesExist ? '✅ YES' : '❌ NO'}`);
       }
     } catch (checkError: any) {
-      console.error('❌ Error checking tables directly:', checkError?.message);
-      // Continue with migration check as fallback
+      console.error('❌ Error checking tables:', checkError?.message);
     }
     
-    // CRITICAL: Don't try to run migrations in the OAuth callback - they run on startup
-    // If tables don't exist, migrations are either still running or failed
-    // Just check once more with a quick timeout, then show error
+    // If tables don't exist, wait for migrations to complete (with timeout)
     if (!tablesExist) {
-      console.log('📦 Tables not found - migrations should run on startup');
-      console.log('📦 Re-checking once more (might have been created by startup migration)...');
+      console.log('📦 Tables not found - waiting for startup migrations to complete...');
       
-      // One quick re-check in case startup migration just finished
       try {
-        // @ts-ignore
-        const { pool } = await import('../dist/server/db.js');
-        if (pool) {
-          const recheckResult = await Promise.race([
-            pool.query(`
-              SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
-                AND table_name = 'users'
-              );
-            `),
-            new Promise<any>((resolve) => {
-              setTimeout(() => resolve({ rows: [{ exists: false }] }), 2000);
-            })
-          ]);
-          if (recheckResult.rows[0]?.exists) {
-            console.log('✅ Tables now exist (created by startup migration)');
-            tablesExist = true;
-          }
-        }
-      } catch (e: any) {
-        console.error('❌ Re-check error:', e?.message);
-      }
-      
-      // If tables still don't exist, show error immediately
-      if (!tablesExist) {
-        // One final direct check with timeout
+        // Wait for migration promise to complete (max 15 seconds)
+        const migrationResult = await Promise.race([
+          ensureMigrationsRun(),
+          new Promise<boolean>((resolve) => {
+            setTimeout(() => {
+              console.warn('⏱️ Migration wait timeout (15s) - proceeding anyway');
+              resolve(false);
+            }, 15000);
+          })
+        ]);
+        
+        migrationCompleted = migrationResult;
+        console.log(`📦 Migration wait result: ${migrationCompleted ? '✅ Completed' : '⏱️ Timeout or failed'}`);
+        
+        // Re-check tables after waiting for migration
         try {
           // @ts-ignore
           const { pool } = await import('../dist/server/db.js');
           if (pool) {
+            const recheckResult = await Promise.race([
+              pool.query(`
+                SELECT EXISTS (
+                  SELECT FROM information_schema.tables 
+                  WHERE table_schema = 'public' 
+                  AND table_name = 'users'
+                );
+              `),
+              new Promise<any>((resolve) => {
+                setTimeout(() => resolve({ rows: [{ exists: false }] }), 3000);
+              })
+            ]);
+            tablesExist = recheckResult.rows[0]?.exists || false;
+            console.log(`📋 Post-migration table check: ${tablesExist ? '✅ YES' : '❌ NO'}`);
+          }
+        } catch (e: any) {
+          console.error('❌ Re-check error after migration wait:', e?.message);
+        }
+      } catch (e: any) {
+        console.error('❌ Error waiting for migrations:', e?.message);
+      }
+      
+      // If tables still don't exist after waiting, show error
+      if (!tablesExist) {
+        console.error('❌ Tables still do not exist after waiting for migrations');
+        // If it's an auth error, provide specific instructions
+        try {
+          // @ts-ignore
+          const { pool } = await import('../dist/server/db.js');
+          if (pool) {
+            // Try one more quick check
             const finalCheck = await Promise.race([
               pool.query(`
                 SELECT EXISTS (
@@ -454,7 +471,6 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
           }
         } catch (e: any) {
           console.error('❌ Final table check failed:', e?.message);
-          // If it's an auth error, provide specific instructions
           if (e?.message?.includes('password authentication failed') || e?.message?.includes('authentication failed')) {
             return res.status(500).send(`
               <!DOCTYPE html>
