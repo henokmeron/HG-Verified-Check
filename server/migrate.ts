@@ -219,23 +219,31 @@ export async function ensureTablesExist(): Promise<boolean> {
     return true;
   }
 
-  // CRITICAL: Log DATABASE_URL status (without exposing the actual URL)
-  if (!process.env.DATABASE_URL) {
-    console.error('❌ DATABASE_URL environment variable is NOT SET!');
-    console.error('❌ Cannot run migrations without DATABASE_URL');
+  // CRITICAL: Use UNPOOLED connection for migrations (better for transactions and DDL)
+  // Pooled connections can interfere with CREATE TABLE and other DDL operations
+  const dbUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  
+  if (!dbUrl) {
+    console.error('❌ DATABASE_URL or DATABASE_URL_UNPOOLED environment variable is NOT SET!');
+    console.error('❌ Cannot run migrations without a database connection string');
+    console.error('📋 Note: DATABASE_URL_UNPOOLED is preferred for migrations');
     return false;
   }
   
-  const dbUrlPreview = process.env.DATABASE_URL.substring(0, 30) + '...';
-  console.log('📋 DATABASE_URL is set:', dbUrlPreview);
-  console.log('📋 DATABASE_URL length:', process.env.DATABASE_URL.length);
-  console.log('📋 DATABASE_URL starts with:', process.env.DATABASE_URL.substring(0, 10));
+  const dbUrlPreview = dbUrl.substring(0, 30) + '...';
+  const usingUnpooled = !!process.env.DATABASE_URL_UNPOOLED;
+  console.log(`📋 Using ${usingUnpooled ? 'DATABASE_URL_UNPOOLED' : 'DATABASE_URL'} for migrations:`, dbUrlPreview);
+  console.log('📋 Connection string length:', dbUrl.length);
+  console.log('📋 Connection string starts with:', dbUrl.substring(0, 10));
+  if (!usingUnpooled) {
+    console.log('⚠️ Consider using DATABASE_URL_UNPOOLED for migrations (better for DDL operations)');
+  }
   
   let pool: Pool | null = null;
   try {
     console.log('🔄 Creating database connection pool...');
     pool = new Pool({ 
-      connectionString: process.env.DATABASE_URL,
+      connectionString: dbUrl,
       max: 1, // Single connection for migrations
     });
     console.log('✅ Database pool created');
