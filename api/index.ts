@@ -696,24 +696,35 @@ let migrationPromise: Promise<boolean> | null = null;
 
 async function ensureMigrationsRun(): Promise<boolean> {
   if (migrationPromise) {
+    console.log('📦 Migration already running, waiting for existing promise...');
     return migrationPromise; // Return existing promise if already running
   }
   
   migrationPromise = (async () => {
     try {
-      console.log('📦 Checking if database migrations need to run...');
+      console.log('📦 Starting migration check...');
+      console.log('📋 DATABASE_URL available:', !!process.env.DATABASE_URL);
+      
       // @ts-ignore - dist files are generated at build time
       const { ensureTablesExist } = await import('../dist/server/migrate.js');
+      console.log('📦 Migration function imported, calling ensureTablesExist()...');
+      
       const result = await ensureTablesExist();
+      
+      console.log('📦 Migration function returned:', result);
+      
       if (result) {
-        console.log('✅ Database migrations completed');
+        console.log('✅ Database migrations completed successfully');
       } else {
-        console.warn('⚠️ Database migrations did not complete');
+        console.error('❌ Database migrations did NOT complete - ensureTablesExist() returned false');
+        console.error('❌ Check the migration logs above for detailed error information');
       }
       return result;
     } catch (error: any) {
       const errorMessage = error?.message || error?.toString() || 'Unknown error';
-      console.error('❌ Migration check failed:', errorMessage);
+      console.error('❌ Migration check failed with exception:', errorMessage);
+      console.error('❌ Error code:', error?.code);
+      console.error('❌ Error stack:', error?.stack);
       return false;
     }
   })();

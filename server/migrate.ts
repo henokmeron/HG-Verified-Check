@@ -224,18 +224,33 @@ export async function ensureTablesExist(): Promise<boolean> {
     return false;
   }
 
+  // CRITICAL: Log DATABASE_URL status (without exposing the actual URL)
+  if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL environment variable is NOT SET!');
+    console.error('❌ Cannot run migrations without DATABASE_URL');
+    return false;
+  }
+  
+  const dbUrlPreview = process.env.DATABASE_URL.substring(0, 30) + '...';
+  console.log('📋 DATABASE_URL is set:', dbUrlPreview);
+  console.log('📋 DATABASE_URL length:', process.env.DATABASE_URL.length);
+  console.log('📋 DATABASE_URL starts with:', process.env.DATABASE_URL.substring(0, 10));
+  
   let pool: Pool | null = null;
   try {
+    console.log('🔄 Creating database connection pool...');
     pool = new Pool({ 
       connectionString: process.env.DATABASE_URL,
       max: 1, // Single connection for migrations
     });
+    console.log('✅ Database pool created');
 
     // CRITICAL: Check if users table exists FIRST (before any migration attempts)
     // This is the fastest check and avoids unnecessary work
     console.log('🔍 Checking if database tables exist...');
     let checkResult;
     try {
+      console.log('🔄 Executing table existence check query...');
       checkResult = await pool.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
@@ -243,8 +258,13 @@ export async function ensureTablesExist(): Promise<boolean> {
           AND table_name = 'users'
         );
       `);
+      console.log('✅ Table existence check completed');
+      console.log('📋 Check result:', checkResult?.rows?.[0]);
     } catch (checkError: any) {
       console.error('❌ Error checking for users table:', checkError?.message);
+      console.error('❌ Error code:', checkError?.code);
+      console.error('❌ Error detail:', checkError?.detail);
+      console.error('❌ Error stack:', checkError?.stack);
       // If we can't even check, the database might not be accessible
       // But we'll still try to run migrations in case it's a temporary issue
       console.log('⚠️ Could not check table existence, proceeding with migration attempt...');
