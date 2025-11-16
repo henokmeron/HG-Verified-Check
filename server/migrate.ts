@@ -281,8 +281,8 @@ export async function ensureTablesExist(): Promise<boolean> {
     console.log('📦 Using comprehensive embedded migration SQL...');
     const migrationSQL = getEmbeddedMigrationSQL();
     
+    // CRITICAL: Split SQL statements and ensure tables are created before indexes
     // Split by statement-breakpoint or semicolon for embedded SQL
-    // Embedded SQL uses semicolons, not statement-breakpoint
     let statements: string[] = [];
     
     // Try splitting by statement-breakpoint first (for file-based migrations)
@@ -324,6 +324,31 @@ export async function ensureTablesExist(): Promise<boolean> {
         .map(s => s.trim())
         .filter(s => s.length > 0 && !s.startsWith('--') && s !== ';');
     }
+    
+    // CRITICAL: Sort statements to ensure tables are created before indexes
+    // Tables must come before indexes and foreign keys
+    const tableStatements: string[] = [];
+    const indexStatements: string[] = [];
+    const constraintStatements: string[] = [];
+    const otherStatements: string[] = [];
+    
+    for (const stmt of statements) {
+      const upperStmt = stmt.toUpperCase();
+      if (upperStmt.startsWith('CREATE TABLE')) {
+        tableStatements.push(stmt);
+      } else if (upperStmt.startsWith('CREATE INDEX')) {
+        indexStatements.push(stmt);
+      } else if (upperStmt.startsWith('DO $$') || upperStmt.includes('ALTER TABLE') || upperStmt.includes('ADD CONSTRAINT')) {
+        constraintStatements.push(stmt);
+      } else {
+        otherStatements.push(stmt);
+      }
+    }
+    
+    // Reorder: tables first, then indexes, then constraints, then other
+    statements = [...tableStatements, ...indexStatements, ...constraintStatements, ...otherStatements];
+    
+    console.log(`📋 Reordered statements: ${tableStatements.length} tables, ${indexStatements.length} indexes, ${constraintStatements.length} constraints, ${otherStatements.length} other`);
     
     console.log(`📋 Prepared ${statements.length} migration statements to execute`);
 
