@@ -874,7 +874,7 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
 });
 
 // Test route
-app.get('/test-auth-route', (req: any, res: any) => {
+app.get('/test-auth-route', (_req: any, res: any) => {
   res.json({ 
     message: 'Auth routing is working!',
     hasClientId: !!process.env.GMAIL_CLIENT_ID,
@@ -910,7 +910,7 @@ process.on('uncaughtException', (error: Error) => {
   // Don't exit - allow the function to continue processing requests
 });
 
-process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+process.on('unhandledRejection', (reason: any, _promise: Promise<any>) => {
   // Log but don't crash - allow the function to continue
   const errorMessage = reason?.message || reason?.toString() || 'Unknown rejection';
   console.error('⚠️ Unhandled Rejection (non-fatal):', errorMessage);
