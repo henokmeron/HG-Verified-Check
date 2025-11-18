@@ -445,8 +445,11 @@ export async function ensureTablesExist(): Promise<boolean> {
         dropTableStatements.push(stmt);
       } else if (upperStmt.startsWith('CREATE TABLE')) {
         // CRITICAL: users table must be created first
-        if (upperStmt.includes('"users"') || upperStmt.includes("'users'")) {
+        // Check for users table (case-insensitive, with or without quotes)
+        const stmtLower = stmt.toLowerCase();
+        if (stmtLower.includes('"users"') || stmtLower.includes("'users'") || stmtLower.includes(' table "users"') || stmtLower.includes(' table users')) {
           usersTableStatements.push(stmt);
+          console.log('✅ Detected users table CREATE statement');
         } else {
           otherTableStatements.push(stmt);
         }
