@@ -285,7 +285,7 @@ app.use((req: any, res: Response, next: NextFunction) => {
 // Register /auth/google route - ALWAYS registered BEFORE serveStatic catch-all
 // This ensures the route is matched before any catch-all handlers
 // CRITICAL: This route should NOT wait for migrations - OAuth doesn't need database
-app.get('/auth/google', async (req: any, res: any, _next: any) => {
+app.get('/auth/google', (req: any, res: any, _next: any) => {
   console.log('🔍 /auth/google route hit!');
   console.log('📋 Request details:', {
     method: req.method,
@@ -308,41 +308,33 @@ app.get('/auth/google', async (req: any, res: any, _next: any) => {
     `);
   }
   
+  // Configure Passport if not already configured (non-blocking)
+  ensurePassportConfigured().catch((err) => {
+    console.warn('⚠️ Passport config error (non-fatal):', err?.message);
+  });
+  
+  // CRITICAL: OAuth redirect doesn't need database - just redirect to Google
+  // Don't wait for migrations or passport config - proceed immediately
+  console.log('✅ Redirecting to Google OAuth...');
   try {
-    await ensurePassportConfigured();
-    // CRITICAL: OAuth redirect doesn't need database - just redirect to Google
-    // Don't wait for migrations here
-    console.log('✅ Redirecting to Google OAuth...');
     passport.authenticate('google', { 
       scope: ['profile', 'email']
     })(req, res, _next);
   } catch (error: any) {
-    console.error('❌ Error in /auth/google:', error);
-    // Don't let migration errors block OAuth - just log and continue
-    if (error?.message?.includes('session_pkey') || error?.message?.includes('migration')) {
-      console.warn('⚠️ Migration error in OAuth route - ignoring and proceeding');
-      // Try to proceed anyway
-      try {
-        passport.authenticate('google', { 
-          scope: ['profile', 'email']
-        })(req, res, _next);
-      } catch (retryError) {
-        console.error('❌ OAuth redirect failed even after retry:', retryError);
-        return res.status(500).send(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>OAuth Error</title></head>
-          <body style="font-family: Arial; padding: 40px; text-align: center;">
-            <h1>OAuth Configuration Error</h1>
-            <p>Unable to redirect to Google. Please check Vercel logs.</p>
-            <a href="/">Return to Homepage</a>
-          </body>
-          </html>
-        `);
-      }
-    } else {
-      _next(error);
-    }
+    console.error('❌ Error in passport.authenticate:', error);
+    // Even if passport fails, try to show helpful error
+    return res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>OAuth Error</title></head>
+      <body style="font-family: Arial; padding: 40px; text-align: center;">
+        <h1>OAuth Configuration Error</h1>
+        <p>Unable to redirect to Google. Please check Vercel logs.</p>
+        <p>Error: ${error?.message || 'Unknown error'}</p>
+        <a href="/">Return to Homepage</a>
+      </body>
+      </html>
+    `);
   }
 });
 
