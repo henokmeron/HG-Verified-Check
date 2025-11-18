@@ -285,56 +285,69 @@ app.use((req: any, res: Response, next: NextFunction) => {
 // Register /auth/google route - ALWAYS registered BEFORE serveStatic catch-all
 // This ensures the route is matched before any catch-all handlers
 // CRITICAL: This route should NOT wait for migrations - OAuth doesn't need database
+// CRITICAL: Wrap in try-catch to ensure it runs even if there are errors
 app.get('/auth/google', (req: any, res: any, _next: any) => {
-  console.log('🔍 /auth/google route hit!');
-  console.log('📋 Request details:', {
-    method: req.method,
-    path: req.path,
-    originalUrl: req.originalUrl,
-    url: req.url
-  });
-  
-  if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
-    return res.status(503).send(`
-      <!DOCTYPE html>
-      <html>
-      <head><title>Configuration Error</title></head>
-      <body style="font-family: Arial; padding: 40px; text-align: center;">
-        <h1>OAuth Not Configured</h1>
-        <p>GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET environment variables are missing.</p>
-        <p>Please configure them in Vercel Dashboard → Settings → Environment Variables</p>
-      </body>
-      </html>
-    `);
-  }
-  
-  // Configure Passport if not already configured (non-blocking)
-  ensurePassportConfigured().catch((err) => {
-    console.warn('⚠️ Passport config error (non-fatal):', err?.message);
-  });
-  
-  // CRITICAL: OAuth redirect doesn't need database - just redirect to Google
-  // Don't wait for migrations or passport config - proceed immediately
-  console.log('✅ Redirecting to Google OAuth...');
+  // CRITICAL: Wrap everything in try-catch to ensure route handler always runs
   try {
+    console.log('🔍 /auth/google route hit!');
+    console.log('📋 Request details:', {
+      method: req.method,
+      path: req.path,
+      originalUrl: req.originalUrl,
+      url: req.url
+    });
+    
+    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
+      return res.status(503).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Configuration Error</title></head>
+        <body style="font-family: Arial; padding: 40px; text-align: center;">
+          <h1>OAuth Not Configured</h1>
+          <p>GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET environment variables are missing.</p>
+          <p>Please configure them in Vercel Dashboard → Settings → Environment Variables</p>
+        </body>
+        </html>
+      `);
+    }
+    
+    // Configure Passport if not already configured (non-blocking)
+    ensurePassportConfigured().catch((err) => {
+      console.warn('⚠️ Passport config error (non-fatal):', err?.message);
+    });
+    
+    // CRITICAL: OAuth redirect doesn't need database - just redirect to Google
+    // Don't wait for migrations or passport config - proceed immediately
+    console.log('✅ Redirecting to Google OAuth...');
     passport.authenticate('google', { 
       scope: ['profile', 'email']
     })(req, res, _next);
   } catch (error: any) {
-    console.error('❌ Error in passport.authenticate:', error);
-    // Even if passport fails, try to show helpful error
-    return res.status(500).send(`
-      <!DOCTYPE html>
-      <html>
-      <head><title>OAuth Error</title></head>
-      <body style="font-family: Arial; padding: 40px; text-align: center;">
-        <h1>OAuth Configuration Error</h1>
-        <p>Unable to redirect to Google. Please check Vercel logs.</p>
-        <p>Error: ${error?.message || 'Unknown error'}</p>
-        <a href="/">Return to Homepage</a>
-      </body>
-      </html>
-    `);
+    // If anything fails, log it but still try to redirect
+    console.error('❌ Error in /auth/google route handler:', error);
+    console.error('❌ Error message:', error?.message);
+    console.error('❌ Error stack:', error?.stack);
+    
+    // Try to redirect anyway - don't let errors block OAuth
+    try {
+      passport.authenticate('google', { 
+        scope: ['profile', 'email']
+      })(req, res, _next);
+    } catch (retryError: any) {
+      console.error('❌ Passport authenticate also failed:', retryError);
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>OAuth Error</title></head>
+        <body style="font-family: Arial; padding: 40px; text-align: center;">
+          <h1>OAuth Configuration Error</h1>
+          <p>Unable to redirect to Google. Please check Vercel logs.</p>
+          <p>Error: ${retryError?.message || 'Unknown error'}</p>
+          <a href="/">Return to Homepage</a>
+        </body>
+        </html>
+      `);
+    }
   }
 });
 
