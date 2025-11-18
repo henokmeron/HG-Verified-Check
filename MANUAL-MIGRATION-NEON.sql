@@ -33,6 +33,21 @@ CREATE INDEX IF NOT EXISTS "idx_users_auth_provider" ON "users" ("auth_provider"
 CREATE INDEX IF NOT EXISTS "idx_users_provider_id" ON "users" ("provider_id");
 
 -- Create sessions table (for Passport sessions)
+-- Drop existing table if it has wrong structure (handles session_pkey error)
+DO $$
+BEGIN
+  -- Drop the table if it exists with wrong primary key constraint name
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'sessions') THEN
+    -- Check if the constraint name is wrong
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'session_pkey' AND conrelid = 'sessions'::regclass) THEN
+      -- Drop the constraint first
+      ALTER TABLE "sessions" DROP CONSTRAINT IF EXISTS "session_pkey";
+    END IF;
+    -- Drop the table to recreate with correct structure
+    DROP TABLE IF EXISTS "sessions" CASCADE;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS "sessions" (
 	"sid" varchar PRIMARY KEY NOT NULL,
 	"sess" jsonb NOT NULL,

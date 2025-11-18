@@ -1,0 +1,93 @@
+Table Name,Column Name,Data Type,Nullable,Default Value,Primary Key,Unique,Foreign Key,Index,Description
+users,id,varchar,NO,gen_random_uuid(),YES,NO,,PRIMARY KEY,Unique user ID (UUID)
+users,email,varchar,NO,,NO,YES,,idx_users_email,User email address (unique)
+users,first_name,varchar,YES,,NO,NO,,,User's first name
+users,last_name,varchar,YES,,NO,NO,,,User's last name
+users,profile_image_url,varchar,YES,,NO,NO,,,Google profile image URL
+users,credit_balance,integer,NO,0,NO,NO,,,Current credit balance
+users,stripe_customer_id,varchar,YES,,NO,NO,,,Stripe customer ID for payments
+users,role,varchar,NO,'user',NO,NO,,idx_users_role,User role ('user' or 'admin')
+users,is_active,boolean,NO,true,NO,NO,,,Whether account is active
+users,last_login_at,timestamp,YES,,NO,NO,,,Last login timestamp
+users,preferences,jsonb,NO,'{}',NO,NO,,,User preferences (JSON)
+users,auth_provider,varchar,NO,'local',NO,NO,,idx_users_auth_provider,Authentication provider ('google' 'local')
+users,provider_id,varchar,YES,,NO,NO,,idx_users_provider_id,OAuth provider user ID
+users,password_hash,text,YES,,NO,NO,,,Hashed password (for local auth)
+users,email_verified,boolean,NO,false,NO,NO,,,Whether email is verified
+users,mfa_enabled,boolean,NO,false,NO,NO,,,Whether MFA is enabled
+users,last_login_ip,varchar,YES,,NO,NO,,,IP address of last login
+users,created_at,timestamp,NO,now(),NO,NO,,idx_users_created_at,Account creation timestamp
+users,updated_at,timestamp,NO,now(),NO,NO,,,Last update timestamp
+vehicle_lookups,id,varchar,NO,gen_random_uuid(),YES,NO,,PRIMARY KEY,Unique lookup ID (UUID)
+vehicle_lookups,user_id,varchar,NO,,NO,NO,users.id,idx_vehicle_lookups_user_id,User who performed lookup
+vehicle_lookups,registration,varchar,NO,,NO,NO,,idx_vehicle_lookups_registration,Vehicle registration number
+vehicle_lookups,vehicle_data,jsonb,YES,,NO,NO,,,Full DVLA API response (JSON)
+vehicle_lookups,report_raw,jsonb,YES,,NO,NO,,,Complete VIDcheck JSON response
+vehicle_lookups,credits_cost,integer,NO,1,NO,NO,,,Credits deducted for lookup
+vehicle_lookups,success,boolean,NO,true,NO,NO,,idx_vehicle_lookups_success,Whether lookup succeeded
+vehicle_lookups,error_message,text,YES,,NO,NO,,,Error message if failed
+vehicle_lookups,report_type,varchar,NO,'comprehensive',NO,NO,,,Type of report ('free' 'comprehensive')
+vehicle_lookups,processing_time,integer,YES,,NO,NO,,,Time taken in milliseconds
+vehicle_lookups,api_provider,varchar,NO,'vidcheck',NO,NO,,,API provider used
+vehicle_lookups,metadata,jsonb,NO,'{}',NO,NO,,,Additional metadata (JSON)
+vehicle_lookups,created_at,timestamp,NO,now(),NO,NO,,idx_vehicle_lookups_created_at,Lookup timestamp
+credit_transactions,id,varchar,NO,gen_random_uuid(),YES,NO,,PRIMARY KEY,Unique transaction ID (UUID)
+credit_transactions,user_id,varchar,NO,,NO,NO,users.id,idx_credit_transactions_user_id,User who made transaction
+credit_transactions,type,varchar,NO,,NO,NO,,idx_credit_transactions_type,Transaction type ('purchase' 'deduction' 'refund' 'bonus' 'expired')
+credit_transactions,amount,integer,NO,,NO,NO,,,Credit amount (positive or negative)
+credit_transactions,description,text,YES,,NO,NO,,,Transaction description
+credit_transactions,stripe_payment_intent_id,varchar,YES,,NO,NO,,,Stripe payment ID
+credit_transactions,metadata,jsonb,NO,'{}',NO,NO,,,Additional transaction data (JSON)
+credit_transactions,created_at,timestamp,NO,now(),NO,NO,,idx_credit_transactions_created_at,Transaction timestamp
+saved_reports,id,varchar,NO,gen_random_uuid(),YES,NO,,PRIMARY KEY,Unique report ID (UUID)
+saved_reports,user_id,varchar,NO,,NO,NO,users.id,idx_saved_reports_user_id,User who saved report
+saved_reports,vrm,varchar,NO,,NO,NO,,idx_saved_reports_vrm,Vehicle registration number
+saved_reports,check_type,varchar,NO,,NO,NO,,,Type of check ('comprehensive' or 'free')
+saved_reports,bytes,integer,NO,,NO,NO,,,PDF file size in bytes
+saved_reports,file_name,varchar,NO,,NO,NO,,,PDF filename
+saved_reports,storage_key,varchar,NO,,NO,NO,,,Storage location key
+saved_reports,download_url,varchar,NO,,NO,NO,,,URL to download PDF
+saved_reports,lookup_id,varchar,YES,,NO,NO,,,Related vehicle lookup ID
+saved_reports,download_count,integer,NO,0,NO,NO,,,Number of times downloaded
+saved_reports,expires_at,timestamp,YES,,NO,NO,,,When report expires
+saved_reports,created_at,timestamp,NO,now(),NO,NO,,idx_saved_reports_created_at,Report creation timestamp
+shared_reports,id,varchar,NO,gen_random_uuid(),YES,NO,,PRIMARY KEY,Unique share ID (UUID)
+shared_reports,share_code,varchar,NO,,NO,YES,,,Unique share code for public access
+shared_reports,lookup_id,varchar,NO,,NO,NO,vehicle_lookups.id,,Related vehicle lookup ID
+shared_reports,user_id,varchar,NO,,NO,NO,users.id,,User who shared report
+shared_reports,expires_at,timestamp,YES,,NO,NO,,,When share expires
+shared_reports,view_count,integer,NO,0,NO,NO,,,Number of times viewed
+shared_reports,created_at,timestamp,NO,now(),NO,NO,,,Share creation timestamp
+sessions,sid,varchar,NO,,YES,NO,,PRIMARY KEY,Session ID
+sessions,sess,jsonb,NO,,NO,NO,,,Session data (JSON)
+sessions,expire,timestamp,NO,,NO,NO,,IDX_session_expire,Session expiration
+analytics,id,varchar,NO,gen_random_uuid(),YES,NO,,PRIMARY KEY,Unique analytics ID (UUID)
+analytics,event_type,varchar,NO,,NO,NO,,idx_analytics_event_type,Event type ('page_view' 'lookup' 'download' 'share' etc.)
+analytics,user_id,varchar,YES,,NO,NO,users.id,idx_analytics_user_id,User who triggered event
+analytics,session_id,varchar,YES,,NO,NO,,idx_analytics_session_id,Session identifier
+analytics,page,varchar,YES,,NO,NO,,,Page where event occurred
+analytics,referrer,varchar,YES,,NO,NO,,,Referrer URL
+analytics,user_agent,text,YES,,NO,NO,,,Browser user agent
+analytics,ip_address,varchar,YES,,NO,NO,,,IP address
+analytics,metadata,jsonb,NO,'{}',NO,NO,,,Additional event data (JSON)
+analytics,created_at,timestamp,NO,now(),NO,NO,,idx_analytics_created_at,Event timestamp
+api_usage,id,varchar,NO,gen_random_uuid(),YES,NO,,PRIMARY KEY,Unique usage ID (UUID)
+api_usage,user_id,varchar,YES,,NO,NO,users.id,idx_api_usage_user_id,User who made API call
+api_usage,endpoint,varchar,NO,,NO,NO,,idx_api_usage_endpoint,API endpoint called
+api_usage,method,varchar,NO,,NO,NO,,,HTTP method ('GET' 'POST' etc.)
+api_usage,status_code,integer,NO,,NO,NO,,idx_api_usage_status_code,HTTP status code
+api_usage,response_time,integer,NO,,NO,NO,,,Response time in milliseconds
+api_usage,request_size,integer,YES,,NO,NO,,,Request size in bytes
+api_usage,response_size,integer,YES,,NO,NO,,,Response size in bytes
+api_usage,ip_address,varchar,YES,,NO,NO,,,IP address of request
+api_usage,user_agent,text,YES,,NO,NO,,,Browser user agent
+api_usage,created_at,timestamp,NO,now(),NO,NO,,idx_api_usage_created_at,Request timestamp
+system_config,id,varchar,NO,gen_random_uuid(),YES,NO,,PRIMARY KEY,Unique config ID (UUID)
+system_config,key,varchar,NO,,NO,YES,,idx_system_config_key,Configuration key (unique)
+system_config,value,jsonb,NO,,NO,NO,,,Configuration value (JSON)
+system_config,description,text,YES,,NO,NO,,,Configuration description
+system_config,is_public,boolean,NO,false,NO,NO,,idx_system_config_is_public,Whether config is public
+system_config,updated_by,varchar,YES,,NO,NO,,,User who last updated
+system_config,created_at,timestamp,NO,now(),NO,NO,,,Creation timestamp
+system_config,updated_at,timestamp,NO,now(),NO,NO,,,Last update timestamp
+

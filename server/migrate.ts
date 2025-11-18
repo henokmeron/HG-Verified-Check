@@ -79,10 +79,30 @@ CREATE TABLE IF NOT EXISTS "saved_reports" (
 CREATE INDEX IF NOT EXISTS "idx_saved_reports_user_id" ON "saved_reports" ("user_id");
 CREATE INDEX IF NOT EXISTS "idx_saved_reports_vrm" ON "saved_reports" ("vrm");
 CREATE INDEX IF NOT EXISTS "idx_saved_reports_created_at" ON "saved_reports" ("created_at");
+-- Drop sessions table if it has wrong primary key constraint (handles session_pkey error)
+-- CRITICAL: This must execute BEFORE creating the sessions table
+DO \$\$
+BEGIN
+  -- Drop any existing sessions table with wrong constraints
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'sessions') THEN
+    -- Drop all constraints first
+    ALTER TABLE "sessions" DROP CONSTRAINT IF EXISTS "session_pkey";
+    ALTER TABLE "sessions" DROP CONSTRAINT IF EXISTS "sessions_pkey";
+    -- Drop the table
+    DROP TABLE IF EXISTS "sessions" CASCADE;
+    RAISE NOTICE 'Dropped existing sessions table to fix constraint issues';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- If anything fails, try to drop the table anyway
+    DROP TABLE IF EXISTS "sessions" CASCADE;
+END \$\$;
+
 CREATE TABLE IF NOT EXISTS "sessions" (
-	"sid" varchar PRIMARY KEY NOT NULL,
+	"sid" varchar NOT NULL,
 	"sess" jsonb NOT NULL,
-	"expire" timestamp NOT NULL
+	"expire" timestamp NOT NULL,
+	CONSTRAINT "sessions_pkey" PRIMARY KEY ("sid")
 );
 CREATE TABLE IF NOT EXISTS "shared_reports" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -409,15 +429,27 @@ export async function ensureTablesExist(): Promise<boolean> {
     
     // CRITICAL: Sort statements to ensure tables are created before indexes
     // Tables must come before indexes and foreign keys
-    const tableStatements: string[] = [];
+    // CRITICAL: users table MUST be created first (it's referenced by other tables)
+    // CRITICAL: DO blocks that drop tables must run BEFORE CREATE TABLE
+    const dropTableStatements: string[] = [];
+    const usersTableStatements: string[] = [];
+    const otherTableStatements: string[] = [];
     const indexStatements: string[] = [];
     const constraintStatements: string[] = [];
     const otherStatements: string[] = [];
     
     for (const stmt of statements) {
       const upperStmt = stmt.toUpperCase();
-      if (upperStmt.startsWith('CREATE TABLE')) {
-        tableStatements.push(stmt);
+      // CRITICAL: DO blocks that drop tables must run FIRST
+      if (upperStmt.startsWith('DO $$') && (upperStmt.includes('DROP TABLE') || upperStmt.includes('DROP CONSTRAINT'))) {
+        dropTableStatements.push(stmt);
+      } else if (upperStmt.startsWith('CREATE TABLE')) {
+        // CRITICAL: users table must be created first
+        if (upperStmt.includes('"users"') || upperStmt.includes("'users'")) {
+          usersTableStatements.push(stmt);
+        } else {
+          otherTableStatements.push(stmt);
+        }
       } else if (upperStmt.startsWith('CREATE INDEX')) {
         indexStatements.push(stmt);
       } else if (upperStmt.startsWith('DO $$') || upperStmt.includes('ALTER TABLE') || upperStmt.includes('ADD CONSTRAINT')) {
@@ -427,10 +459,10 @@ export async function ensureTablesExist(): Promise<boolean> {
       }
     }
     
-    // Reorder: tables first, then indexes, then constraints, then other
-    statements = [...tableStatements, ...indexStatements, ...constraintStatements, ...otherStatements];
+    // Reorder: drop statements FIRST, then users table, then other tables, then indexes, then constraints, then other
+    statements = [...dropTableStatements, ...usersTableStatements, ...otherTableStatements, ...indexStatements, ...constraintStatements, ...otherStatements];
     
-    console.log(`📋 Reordered statements: ${tableStatements.length} tables, ${indexStatements.length} indexes, ${constraintStatements.length} constraints, ${otherStatements.length} other`);
+    console.log(`📋 Reordered statements: ${dropTableStatements.length} drop statement(s), ${usersTableStatements.length} users table(s), ${otherTableStatements.length} other tables, ${indexStatements.length} indexes, ${constraintStatements.length} constraints, ${otherStatements.length} other`);
     
     console.log(`📋 Prepared ${statements.length} migration statements to execute`);
 

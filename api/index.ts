@@ -560,272 +560,41 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
     });
     
     // Use Passport authenticate with proper error handling
-    // CRITICAL: Never redirect back to /auth/google to prevent loops
+    // Simplified callback - let Passport handle session management
     passport.authenticate('google', { 
-      failureRedirect: '/login?error=google_failed', // Always redirect to /login, never back to /auth/google
-      session: true // Ensure session is used
-    })(req, res, async (err: any) => {
+      failureRedirect: '/login?error=google_failed',
+      session: true
+    })(req, res, (err: any) => {
       console.log('🔍 Passport authenticate callback invoked');
       console.log('📋 Error:', err ? err.message : 'none');
       console.log('📋 Has user:', !!req.user);
-      console.log('📋 User details:', req.user ? { id: req.user.id, email: req.user.email } : 'none');
-      console.log('🔍 Request session in callback:', {
-        sessionId: req.session?.id,
-        sessionKeys: req.session ? Object.keys(req.session) : [],
-        hasPassport: !!(req.session as any)?.passport,
-        passportUser: (req.session as any)?.passport?.user
-      });
       
       if (err) {
         console.error('❌ OAuth authentication error:', err);
-        console.error('❌ Error stack:', err.stack);
-        // Show error page instead of redirecting to prevent loops
-        return res.status(500).send(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>OAuth Authentication Failed</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-              .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-              h1 { color: #ef4444; margin-bottom: 20px; }
-              p { color: #6b7280; margin-bottom: 20px; }
-              .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
-              .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-            </style>
-          </head>
-          <body>
-            <div class="error-box">
-              <h1>❌ OAuth Authentication Failed</h1>
-              <p>There was an error authenticating with Google.</p>
-              <div class="error-details">
-                <strong>Error:</strong> ${err?.message || 'Unknown error'}<br>
-                <strong>Please check Vercel logs for more details.</strong>
-              </div>
-              <a href="/" class="button">Return to Homepage</a>
-            </div>
-          </body>
-          </html>
-        `);
+        return res.redirect('/login?error=oauth_failed');
       }
       
       if (!req.user) {
         console.error('❌ No user after OAuth authentication');
-        console.error('❌ This usually means the GoogleStrategy callback failed');
-        // Show error page instead of redirecting to prevent loops
-        return res.status(500).send(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>User Not Found</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-              .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-              h1 { color: #ef4444; margin-bottom: 20px; }
-              p { color: #6b7280; margin-bottom: 20px; }
-              .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-            </style>
-          </head>
-          <body>
-            <div class="error-box">
-              <h1>❌ User Not Found</h1>
-              <p>The GoogleStrategy callback failed to create or find your user account.</p>
-              <p>This might be a database issue. Please check Vercel logs.</p>
-              <a href="/" class="button">Return to Homepage</a>
-            </div>
-          </body>
-          </html>
-        `);
+        return res.redirect('/login?error=user_not_found');
       }
       
-      console.log('✅ User authenticated, logging in...');
-      console.log('📋 User details:', {
-        id: req.user.id,
-        email: req.user.email,
-        firstName: req.user.firstName
-      });
+      console.log('✅ User authenticated:', req.user.email);
       
-      // CRITICAL: Verify user object before calling req.login
-      if (!req.user || !req.user.id) {
-        console.error('❌ CRITICAL: req.user is invalid before req.login!');
-        console.error('❌ req.user:', req.user);
-        return res.status(500).send(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Authentication Error</title>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-              .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-              h1 { color: #ef4444; margin-bottom: 20px; }
-              p { color: #6b7280; margin-bottom: 20px; }
-              .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-            </style>
-          </head>
-          <body>
-            <div class="error-box">
-              <h1>❌ Invalid User Object</h1>
-              <p>The user object is invalid. Please check Vercel logs for details.</p>
-              <a href="/" class="button">Return to Homepage</a>
-            </div>
-          </body>
-          </html>
-        `);
-      }
-      
-      // Log in the user (creates session)
-      // CRITICAL: Use req.login with callback to ensure session is saved
-      console.log('🔐 About to call req.login with user:', {
-        userId: req.user.id,
-        userEmail: req.user.email
-      });
-      
-      // CRITICAL: Manually set passport data in session BEFORE req.login
-      // This ensures the data is there even if req.login has issues
-      if (!(req.session as any).passport) {
-        (req.session as any).passport = {};
-      }
-      (req.session as any).passport.user = req.user.id;
-      console.log('🔐 Manually set passport.user in session:', req.user.id);
-      
-      // CRITICAL: Save session immediately after setting passport data
-      // This ensures the data is persisted before req.login
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((saveErr: any) => {
-          if (saveErr) {
-            console.error('❌ Error saving session after setting passport data:', saveErr);
-            reject(saveErr);
-          } else {
-            console.log('✅ Session saved after setting passport data');
-            console.log('🔐 Session after manual passport set and save:', {
-              sessionId: req.session?.id,
-              hasPassport: !!(req.session as any)?.passport,
-              passportUser: (req.session as any)?.passport?.user,
-              sessionKeys: req.session ? Object.keys(req.session) : []
-            });
-            resolve();
-          }
-        });
-      });
-      
+      // Use req.login to establish session
       req.login(req.user, { session: true }, (loginErr: any) => {
         if (loginErr) {
-          console.error('❌ Login error after OAuth:', loginErr);
-          console.error('❌ Login error stack:', loginErr.stack);
-          // Even if req.login fails, we manually set passport data, so continue
-          console.log('⚠️ req.login failed, but passport data was manually set - continuing...');
-        } else {
-          console.log('✅ req.login completed successfully');
+          console.error('❌ Login error:', loginErr);
+          return res.redirect('/login?error=login_failed');
         }
         
-        console.log('🔐 Session immediately after req.login:', {
-          sessionId: req.session?.id,
-          hasPassport: !!(req.session as any)?.passport,
-          passportUser: (req.session as any)?.passport?.user,
-          sessionKeys: req.session ? Object.keys(req.session) : []
-        });
+        console.log('✅ User logged in successfully');
         
-        // CRITICAL: Verify passport data is in session (either from req.login or manual set)
-        if (!(req.session as any)?.passport?.user) {
-          console.error('❌ CRITICAL: Passport data NOT in session after req.login!');
-          console.error('❌ This means req.login() did not serialize the user properly');
-          console.error('❌ Session data:', JSON.stringify(req.session, null, 2));
-          // Try to set it again manually
-          (req.session as any).passport = { user: req.user.id };
-          console.log('🔐 Attempted to manually set passport data again');
-        }
-        
-        // CRITICAL: Explicitly save the session to ensure passport data is persisted
-        // In serverless, we MUST save the session before redirecting
-        req.session.save((saveErr: any) => {
-          if (saveErr) {
-            console.error('❌ Error saving session:', saveErr);
-            console.error('❌ Session save error stack:', saveErr.stack);
-            return res.status(500).send(`
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <title>Session Save Error</title>
-                <style>
-                  body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-                  .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                  h1 { color: #ef4444; margin-bottom: 20px; }
-                  p { color: #6b7280; margin-bottom: 20px; }
-                  .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
-                  .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-                </style>
-              </head>
-              <body>
-                <div class="error-box">
-                  <h1>❌ Session Save Failed</h1>
-                  <p>There was an error saving your session after login. Please try again.</p>
-                  <div class="error-details">
-                    <strong>Error:</strong> ${saveErr?.message || 'Unknown error'}<br>
-                    <strong>Please check Vercel logs for more details.</strong>
-                  </div>
-                  <a href="/" class="button">Return to Homepage</a>
-                </div>
-              </body>
-              </html>
-            `);
-          }
-          
-          console.log('✅ Session saved successfully');
-          console.log('🔐 Session after save:', {
-            sessionId: req.session?.id,
-            userId: req.user?.id,
-            userEmail: req.user?.email,
-            hasUser: !!req.user,
-            hasPassport: !!(req.session as any)?.passport,
-            passportUser: (req.session as any)?.passport?.user,
-            sessionKeys: req.session ? Object.keys(req.session) : []
-          });
-          
-          // Verify passport data is in session before redirecting
-          if (!(req.session as any)?.passport?.user) {
-            console.error('❌ CRITICAL: Passport data not in session after save!');
-            console.error('❌ Session data:', JSON.stringify(req.session, null, 2));
-            return res.status(500).send(`
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <title>Session Error</title>
-                <style>
-                  body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-                  .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                  h1 { color: #ef4444; margin-bottom: 20px; }
-                  p { color: #6b7280; margin-bottom: 20px; }
-                  .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-                </style>
-              </head>
-              <body>
-                <div class="error-box">
-                  <h1>❌ Session Data Missing</h1>
-                  <p>Passport data was not found in the session after save. Please check Vercel logs.</p>
-                  <a href="/" class="button">Return to Homepage</a>
-                </div>
-              </body>
-              </html>
-            `);
-          }
-          
-          console.log('✅ Google OAuth callback successful - passport data confirmed in session');
-          
-          // Redirect to app
-          const returnTo = (req.session as any)?.returnTo || '/app';
-          delete (req.session as any)?.returnTo;
-          console.log('🔄 Redirecting to:', returnTo);
-          
-          // Save session one more time before redirect to ensure it's persisted
-          req.session.save((finalSaveErr: any) => {
-            if (finalSaveErr) {
-              console.error('❌ Error in final session save:', finalSaveErr);
-            } else {
-              console.log('✅ Final session save completed');
-            }
-            res.redirect(returnTo);
-          });
-        });
+        // Redirect to app
+        const returnTo = (req.session as any)?.returnTo || '/app';
+        delete (req.session as any)?.returnTo;
+        console.log('🔄 Redirecting to:', returnTo);
+        res.redirect(returnTo);
       });
     });
   } catch (error: any) {
