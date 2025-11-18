@@ -177,21 +177,6 @@ app.use(async (req: any, _res: Response, next: NextFunction) => {
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Error handling middleware
-app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-  
-  console.error('Request error:', {
-    status,
-    message,
-    path: req.path,
-    method: req.method
-  });
-
-  res.status(status).json({ message });
-});
-
 // Initialize routes and static serving
 let initialized = false;
 let initPromise: Promise<void> | null = null;
@@ -299,6 +284,7 @@ app.use((req: any, res: Response, next: NextFunction) => {
 
 // Register /auth/google route - ALWAYS registered BEFORE serveStatic catch-all
 // This ensures the route is matched before any catch-all handlers
+// CRITICAL: This route should NOT wait for migrations - OAuth doesn't need database
 app.get('/auth/google', async (req: any, res: any, _next: any) => {
   console.log('🔍 /auth/google route hit!');
   console.log('📋 Request details:', {
@@ -324,14 +310,39 @@ app.get('/auth/google', async (req: any, res: any, _next: any) => {
   
   try {
     await ensurePassportConfigured();
-    // CRITICAL: Removed prompt: 'select_account' to prevent redirect loops
-    // Google will automatically show account picker if needed
+    // CRITICAL: OAuth redirect doesn't need database - just redirect to Google
+    // Don't wait for migrations here
+    console.log('✅ Redirecting to Google OAuth...');
     passport.authenticate('google', { 
       scope: ['profile', 'email']
     })(req, res, _next);
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error in /auth/google:', error);
-    _next(error);
+    // Don't let migration errors block OAuth - just log and continue
+    if (error?.message?.includes('session_pkey') || error?.message?.includes('migration')) {
+      console.warn('⚠️ Migration error in OAuth route - ignoring and proceeding');
+      // Try to proceed anyway
+      try {
+        passport.authenticate('google', { 
+          scope: ['profile', 'email']
+        })(req, res, _next);
+      } catch (retryError) {
+        console.error('❌ OAuth redirect failed even after retry:', retryError);
+        return res.status(500).send(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>OAuth Error</title></head>
+          <body style="font-family: Arial; padding: 40px; text-align: center;">
+            <h1>OAuth Configuration Error</h1>
+            <p>Unable to redirect to Google. Please check Vercel logs.</p>
+            <a href="/">Return to Homepage</a>
+          </body>
+          </html>
+        `);
+      }
+    } else {
+      _next(error);
+    }
   }
 });
 
@@ -742,14 +753,46 @@ async function ensureMigrationsRun(): Promise<boolean> {
   return migrationPromise;
 }
 
-// Start migration immediately (non-blocking for module load, but will complete before first request)
-ensureMigrationsRun();
+// Start migration immediately (non-blocking for module load)
+// CRITICAL: Don't let migration errors block the app - catch and log them
+ensureMigrationsRun().catch((error: any) => {
+  console.error('⚠️ Migration startup error (non-fatal):', error?.message || error);
+  // Don't throw - allow the app to continue
+  // OAuth routes don't need database, so they can still work
+});
 
 // Initialize app in background (non-blocking)
 // Routes are already registered above, so they'll be matched before serveStatic's catch-all
 initializeApp().catch(err => {
   console.error('⚠️ Initialization error (non-fatal):', err);
   // Don't throw - allow the function to continue
+});
+
+// Error handling middleware - MUST be registered AFTER all routes
+// CRITICAL: Don't catch migration errors - they should be handled separately
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+  
+  console.error('Request error:', {
+    status,
+    message,
+    path: req.path,
+    method: req.method
+  });
+
+  // Don't return JSON for migration errors - they should be handled gracefully
+  // Migration errors shouldn't block OAuth routes
+  if (message.includes('session_pkey') || message.includes('relation') || message.includes('migration')) {
+    console.error('⚠️ Migration-related error caught by error handler - this should not block OAuth');
+    // For OAuth routes, don't fail - let them proceed
+    if (req.path.startsWith('/auth/google')) {
+      console.log('⚠️ Allowing OAuth route to proceed despite migration error');
+      return _next(); // Continue to next handler
+    }
+  }
+
+  res.status(status).json({ message });
 });
 
 // Export the Express app directly - Vercel supports this
