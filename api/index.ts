@@ -437,10 +437,10 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
     });
     
     // Use Passport authenticate with proper error handling
-    // CRITICAL: Use session: false and manually save session to ensure persistence
+    // CRITICAL: Use session: true so req.login() works properly
     passport.authenticate('google', { 
       failureRedirect: '/login?error=google_failed',
-      session: false  // We'll handle session manually
+      session: true  // Enable session for req.login()
     })(req, res, async (err: any) => {
       console.log('🔍 Passport authenticate callback invoked');
       console.log('📋 Error:', err ? err.message : 'none');
