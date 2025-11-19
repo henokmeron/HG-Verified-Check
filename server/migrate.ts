@@ -21,6 +21,24 @@ let migrationRun = false;
 // This includes the comprehensive schema with ALL columns
 function getEmbeddedMigrationSQL(): string {
   return `
+-- CRITICAL: Drop sessions table first to fix session_pkey error
+DO $$
+BEGIN
+  -- Drop sessions table if it exists with wrong constraints
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'sessions') THEN
+    -- Drop all constraints first
+    ALTER TABLE "sessions" DROP CONSTRAINT IF EXISTS "session_pkey";
+    ALTER TABLE "sessions" DROP CONSTRAINT IF EXISTS "sessions_pkey";
+    -- Drop the table
+    DROP TABLE IF EXISTS "sessions" CASCADE;
+    RAISE NOTICE 'Dropped existing sessions table to fix constraint issues';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    -- If anything fails, try to drop the table anyway
+    DROP TABLE IF EXISTS "sessions" CASCADE;
+END $$;
+
 -- Comprehensive schema with all columns
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -439,12 +457,17 @@ export async function ensureTablesExist(): Promise<boolean> {
     const otherStatements: string[] = [];
     
     for (const stmt of statements) {
-      const upperStmt = stmt.toUpperCase();
-      const stmtLower = stmt.toLowerCase();
+      const upperStmt = stmt.toUpperCase().trim();
+      const stmtLower = stmt.toLowerCase().trim();
+      const stmtTrimmed = stmt.trim();
       
-      // Debug: Log first 100 chars of each CREATE TABLE statement
+      // Debug: Log first 150 chars of each CREATE TABLE statement
       if (upperStmt.startsWith('CREATE TABLE')) {
-        console.log(`🔍 Found CREATE TABLE statement (first 100 chars): ${stmt.substring(0, 100)}`);
+        console.log(`🔍 Found CREATE TABLE statement (first 150 chars): ${stmtTrimmed.substring(0, 150)}`);
+        // Check if it's users table
+        if (stmtTrimmed.includes('"users"') || stmtTrimmed.includes("'users'")) {
+          console.log('✅ This is the USERS table!');
+        }
       }
       
       // CRITICAL: DO blocks that drop tables must run FIRST
@@ -452,12 +475,15 @@ export async function ensureTablesExist(): Promise<boolean> {
         dropTableStatements.push(stmt);
       } else if (upperStmt.startsWith('CREATE TABLE')) {
         // CRITICAL: users table must be created first
-        // Check for users table (case-insensitive, with or without quotes)
-        // More comprehensive check - look for "users" anywhere in the statement
-        if (stmtLower.includes('"users"') || stmtLower.includes("'users'") || stmtLower.includes(' table "users"') || stmtLower.includes(' table users') || stmtLower.includes('create table "users"') || stmtLower.includes('create table users')) {
+        // Check for users table - look for "users" in the table name
+        // The table name appears right after "CREATE TABLE IF NOT EXISTS" or "CREATE TABLE"
+        const tableNameMatch = stmtTrimmed.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i);
+        const tableName = tableNameMatch ? tableNameMatch[1].toLowerCase() : '';
+        
+        if (tableName === 'users' || stmtTrimmed.includes('"users"') || stmtTrimmed.includes("'users'")) {
           usersTableStatements.push(stmt);
           console.log('✅ Detected users table CREATE statement');
-          console.log(`📋 Users table statement preview: ${stmt.substring(0, 150)}...`);
+          console.log(`📋 Users table statement preview: ${stmtTrimmed.substring(0, 200)}...`);
         } else {
           otherTableStatements.push(stmt);
         }

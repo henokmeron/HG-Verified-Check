@@ -674,12 +674,13 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
 
   // Don't return JSON for migration errors - they should be handled gracefully
   // Migration errors shouldn't block OAuth routes
+  // CRITICAL: For OAuth callback, don't redirect on migration errors - let it proceed
   if (message.includes('session_pkey') || message.includes('relation') || message.includes('migration')) {
     console.error('⚠️ Migration-related error caught by error handler - this should not block OAuth');
-    // For OAuth routes, try to manually call the route handler
-    // The error happened before the route could run, so we need to handle it manually
-    if (req.path.startsWith('/auth/google') && req.method === 'GET') {
-      console.log('⚠️ Migration error for OAuth route - attempting manual redirect');
+    
+    // For OAuth INIT route (/auth/google), manually redirect to Google
+    if (req.path === '/auth/google' && req.method === 'GET') {
+      console.log('⚠️ Migration error for OAuth init route - attempting manual redirect');
       // Try to redirect to Google OAuth manually
       if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
         try {
@@ -702,6 +703,14 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
         }
       }
       return res.status(503).json({ message: 'OAuth not configured' });
+    }
+    
+    // For OAuth CALLBACK route, ignore the error and let the callback handler proceed
+    // The callback handler will handle user creation even if migrations failed
+    if (req.path === '/auth/google/callback' && req.method === 'GET') {
+      console.log('⚠️ Migration error for OAuth callback - ignoring and letting callback proceed');
+      // Don't send response - let the callback route handler process the request
+      return;
     }
   }
 
