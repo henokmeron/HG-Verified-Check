@@ -790,14 +790,32 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   // Migration errors shouldn't block OAuth routes
   if (message.includes('session_pkey') || message.includes('relation') || message.includes('migration')) {
     console.error('⚠️ Migration-related error caught by error handler - this should not block OAuth');
-    // For OAuth routes, ignore the error completely - don't send any response
-    // The route handler should have already run, but if it didn't, we'll let it through
-    if (req.path.startsWith('/auth/google')) {
-      console.log('⚠️ Ignoring migration error for OAuth route');
-      // Clear the error and let Express continue processing (this won't work, but try anyway)
-      // Actually, we need to not catch this error at all for OAuth routes
-      // The best fix is to prevent the error from reaching this handler
-      return res.status(200).end(); // Send empty response to prevent further processing
+    // For OAuth routes, try to manually call the route handler
+    // The error happened before the route could run, so we need to handle it manually
+    if (req.path.startsWith('/auth/google') && req.method === 'GET') {
+      console.log('⚠️ Migration error for OAuth route - attempting manual redirect');
+      // Try to redirect to Google OAuth manually
+      if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET) {
+        try {
+          // Manually construct Google OAuth URL
+          const redirectUri = `${req.protocol}://${req.get('host')}/auth/google/callback`;
+          const params = new URLSearchParams({
+            client_id: process.env.GMAIL_CLIENT_ID,
+            redirect_uri: redirectUri,
+            response_type: 'code',
+            scope: 'profile email',
+            access_type: 'offline',
+            prompt: 'consent'
+          });
+          const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+          console.log('✅ Redirecting to Google OAuth manually');
+          return res.redirect(googleAuthUrl);
+        } catch (redirectError: any) {
+          console.error('❌ Failed to redirect manually:', redirectError);
+          return res.status(500).json({ message: 'OAuth redirect failed', error: redirectError?.message });
+        }
+      }
+      return res.status(503).json({ message: 'OAuth not configured' });
     }
   }
 

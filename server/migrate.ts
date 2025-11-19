@@ -440,16 +440,24 @@ export async function ensureTablesExist(): Promise<boolean> {
     
     for (const stmt of statements) {
       const upperStmt = stmt.toUpperCase();
+      const stmtLower = stmt.toLowerCase();
+      
+      // Debug: Log first 100 chars of each CREATE TABLE statement
+      if (upperStmt.startsWith('CREATE TABLE')) {
+        console.log(`🔍 Found CREATE TABLE statement (first 100 chars): ${stmt.substring(0, 100)}`);
+      }
+      
       // CRITICAL: DO blocks that drop tables must run FIRST
       if (upperStmt.startsWith('DO $$') && (upperStmt.includes('DROP TABLE') || upperStmt.includes('DROP CONSTRAINT'))) {
         dropTableStatements.push(stmt);
       } else if (upperStmt.startsWith('CREATE TABLE')) {
         // CRITICAL: users table must be created first
         // Check for users table (case-insensitive, with or without quotes)
-        const stmtLower = stmt.toLowerCase();
-        if (stmtLower.includes('"users"') || stmtLower.includes("'users'") || stmtLower.includes(' table "users"') || stmtLower.includes(' table users')) {
+        // More comprehensive check - look for "users" anywhere in the statement
+        if (stmtLower.includes('"users"') || stmtLower.includes("'users'") || stmtLower.includes(' table "users"') || stmtLower.includes(' table users') || stmtLower.includes('create table "users"') || stmtLower.includes('create table users')) {
           usersTableStatements.push(stmt);
           console.log('✅ Detected users table CREATE statement');
+          console.log(`📋 Users table statement preview: ${stmt.substring(0, 150)}...`);
         } else {
           otherTableStatements.push(stmt);
         }
