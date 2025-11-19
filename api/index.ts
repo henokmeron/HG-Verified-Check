@@ -708,9 +708,10 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     // For OAuth CALLBACK route, ignore the error and let the callback handler proceed
     // The callback handler will handle user creation even if migrations failed
     if (req.path === '/auth/google/callback' && req.method === 'GET') {
-      console.log('⚠️ Migration error for OAuth callback - ignoring and letting callback proceed');
-      // Don't send response - let the callback route handler process the request
-      return;
+      console.log('⚠️ Migration error for OAuth callback - ignoring error and continuing');
+      // Clear the error and continue to next handler (the route handler)
+      // This allows the callback route to process the request
+      return _next();
     }
   }
 
