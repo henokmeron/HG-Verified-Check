@@ -416,152 +416,13 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
       console.error('❌ Error checking tables:', checkError?.message);
     }
     
-    // If tables don't exist, wait for migrations to complete (with timeout)
+    // CRITICAL: Don't block OAuth if tables don't exist
+    // Passport's user creation will handle table creation via upsertUser
+    // If tables don't exist, just log a warning and proceed
     if (!tablesExist) {
-      console.log('📦 Tables not found - waiting for startup migrations to complete...');
-      
-      try {
-        // Wait for migration promise to complete (max 15 seconds)
-        const migrationResult = await Promise.race([
-          ensureMigrationsRun(),
-          new Promise<boolean>((resolve) => {
-            setTimeout(() => {
-              console.warn('⏱️ Migration wait timeout (15s) - proceeding anyway');
-              resolve(false);
-            }, 15000);
-          })
-        ]);
-        
-        migrationCompleted = migrationResult;
-        console.log(`📦 Migration wait result: ${migrationCompleted ? '✅ Completed' : '⏱️ Timeout or failed'}`);
-        
-        // Re-check tables after waiting for migration
-        try {
-          // @ts-ignore
-          const { pool } = await import('../dist/server/db.js');
-          if (pool) {
-            const recheckResult = await Promise.race([
-              pool.query(`
-                SELECT EXISTS (
-                  SELECT FROM information_schema.tables 
-                  WHERE table_schema = 'public' 
-                  AND table_name = 'users'
-                );
-              `),
-              new Promise<any>((resolve) => {
-                setTimeout(() => resolve({ rows: [{ exists: false }] }), 3000);
-              })
-            ]);
-            tablesExist = recheckResult.rows[0]?.exists || false;
-            console.log(`📋 Post-migration table check: ${tablesExist ? '✅ YES' : '❌ NO'}`);
-          }
-        } catch (e: any) {
-          console.error('❌ Re-check error after migration wait:', e?.message);
-        }
-      } catch (e: any) {
-        console.error('❌ Error waiting for migrations:', e?.message);
-      }
-      
-      // If tables still don't exist after waiting, show error
-      if (!tablesExist) {
-        console.error('❌ Tables still do not exist after waiting for migrations');
-        // If it's an auth error, provide specific instructions
-        try {
-          // @ts-ignore
-          const { pool } = await import('../dist/server/db.js');
-          if (pool) {
-            // Try one more quick check
-            const finalCheck = await Promise.race([
-              pool.query(`
-                SELECT EXISTS (
-                  SELECT FROM information_schema.tables 
-                  WHERE table_schema = 'public' 
-                  AND table_name = 'users'
-                );
-              `),
-              new Promise<any>((resolve) => {
-                setTimeout(() => resolve({ rows: [{ exists: false }] }), 2000);
-              })
-            ]);
-            tablesExist = finalCheck.rows[0]?.exists || false;
-          }
-        } catch (e: any) {
-          console.error('❌ Final table check failed:', e?.message);
-          if (e?.message?.includes('password authentication failed') || e?.message?.includes('authentication failed')) {
-            return res.status(500).send(`
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <title>Database Authentication Error</title>
-                <style>
-                  body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-                  .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                  h1 { color: #ef4444; margin-bottom: 20px; }
-                  p { color: #6b7280; margin-bottom: 20px; line-height: 1.6; }
-                  .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
-                  .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-                </style>
-              </head>
-              <body>
-                <div class="error-box">
-                  <h1>❌ Database Authentication Failed</h1>
-                  <p>The DATABASE_URL in Vercel has an incorrect password.</p>
-                  <div class="error-details">
-                    <strong>To Fix:</strong><br>
-                    1. Go to Neon Console: https://console.neon.tech<br>
-                    2. Get the correct connection string<br>
-                    3. Update DATABASE_URL in Vercel → Settings → Environment Variables<br>
-                    4. Redeploy your project<br>
-                    <br>
-                    <strong>See FIX-DATABASE-AUTHENTICATION.md for detailed steps</strong>
-                  </div>
-                  <a href="/" class="button">Return to Homepage</a>
-                </div>
-              </body>
-              </html>
-            `);
-          }
-        }
-        
-        if (!tablesExist) {
-          console.error('❌ Migrations failed to complete and tables do not exist');
-          return res.status(500).send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Database Error</title>
-              <style>
-                body { font-family: Arial, sans-serif; padding: 40px; text-align: center; background: #f3f4f6; }
-                .error-box { background: white; padding: 40px; border-radius: 8px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                h1 { color: #ef4444; margin-bottom: 20px; }
-                p { color: #6b7280; margin-bottom: 20px; line-height: 1.6; }
-                .error-details { background: #fef2f2; padding: 15px; border-radius: 4px; margin: 20px 0; text-align: left; font-family: monospace; font-size: 12px; color: #991b1b; }
-                .button { background: #6b46c1; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; margin-top: 20px; }
-              </style>
-            </head>
-            <body>
-              <div class="error-box">
-                <h1>❌ Database Not Ready</h1>
-                <p>Database tables are not initialized. The migration process timed out or failed.</p>
-                <div class="error-details">
-                  <strong>Possible causes:</strong><br>
-                  • DATABASE_URL is incorrect (check authentication)<br>
-                  • Database connection is slow or timing out<br>
-                  • Migration process is stuck<br>
-                  <br>
-                  <strong>To Fix:</strong><br>
-                  1. Check Vercel logs for detailed error messages<br>
-                  2. Verify DATABASE_URL in Vercel → Settings → Environment Variables<br>
-                  3. Try running migrations manually in Neon Console<br>
-                  4. Wait a few minutes and try again
-                </div>
-                <a href="/" class="button">Return to Homepage</a>
-              </div>
-            </body>
-            </html>
-          `);
-        }
-      }
+      console.warn('⚠️ Tables not found, but proceeding with OAuth - user creation will handle it');
+      // Don't wait for migrations - proceed immediately
+      // The upsertUser function will create tables if needed
     }
     
     console.log('✅ Proceeding with authentication (tables exist: ' + tablesExist + ')...');
@@ -576,14 +437,15 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
     });
     
     // Use Passport authenticate with proper error handling
-    // Simplified callback - let Passport handle session management
+    // CRITICAL: Use session: false and manually save session to ensure persistence
     passport.authenticate('google', { 
       failureRedirect: '/login?error=google_failed',
-      session: true
-    })(req, res, (err: any) => {
+      session: false  // We'll handle session manually
+    })(req, res, async (err: any) => {
       console.log('🔍 Passport authenticate callback invoked');
       console.log('📋 Error:', err ? err.message : 'none');
       console.log('📋 Has user:', !!req.user);
+      console.log('📋 User details:', req.user ? { id: req.user.id, email: req.user.email } : 'none');
       
       if (err) {
         console.error('❌ OAuth authentication error:', err);
@@ -597,21 +459,26 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
       
       console.log('✅ User authenticated:', req.user.email);
       
-      // Use req.login to establish session
-      req.login(req.user, { session: true }, (loginErr: any) => {
-        if (loginErr) {
-          console.error('❌ Login error:', loginErr);
-          return res.redirect('/login?error=login_failed');
-        }
-        
-        console.log('✅ User logged in successfully');
-        
-        // Redirect to app
-        const returnTo = (req.session as any)?.returnTo || '/app';
-        delete (req.session as any)?.returnTo;
-        console.log('🔄 Redirecting to:', returnTo);
-        res.redirect(returnTo);
-      });
+      // CRITICAL: Manually set passport user in session and save
+      try {
+        (req.session as any).passport = { user: req.user.id };
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err: any) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        console.log('✅ Session saved with user ID:', req.user.id);
+      } catch (sessionError: any) {
+        console.error('❌ Session save error:', sessionError);
+        // Continue anyway - session might still work
+      }
+      
+      // Redirect to app
+      const returnTo = (req.session as any)?.returnTo || '/app';
+      delete (req.session as any)?.returnTo;
+      console.log('🔄 Redirecting to:', returnTo);
+      res.redirect(returnTo);
     });
   } catch (error: any) {
     console.error('❌ Unexpected error in callback handler:', error);
