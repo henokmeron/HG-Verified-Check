@@ -564,7 +564,7 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
       }
     }
     
-    console.log('✅ Database tables confirmed to exist, proceeding with authentication...');
+    console.log('✅ Proceeding with authentication (tables exist: ' + tablesExist + ')...');
     
     await ensurePassportConfigured();
     console.log('✅ Passport configured, starting authentication...');
