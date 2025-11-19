@@ -459,26 +459,45 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
       
       console.log('✅ User authenticated:', req.user.email);
       
-      // CRITICAL: Manually set passport user in session and save
-      try {
-        (req.session as any).passport = { user: req.user.id };
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err: any) => {
-            if (err) reject(err);
-            else resolve();
-          });
+      // CRITICAL: Use req.login() to properly establish session
+      // This is the correct way to log in a user with Passport
+      req.login(req.user, { session: true }, async (loginErr: any) => {
+        if (loginErr) {
+          console.error('❌ Login error:', loginErr);
+          return res.redirect('/login?error=login_failed');
+        }
+        
+        console.log('✅ User logged in via req.login()');
+        console.log('🔐 Session after login:', {
+          sessionId: req.session?.id,
+          hasPassport: !!(req.session as any)?.passport,
+          passportUser: (req.session as any)?.passport?.user
         });
-        console.log('✅ Session saved with user ID:', req.user.id);
-      } catch (sessionError: any) {
-        console.error('❌ Session save error:', sessionError);
-        // Continue anyway - session might still work
-      }
-      
-      // Redirect to app
-      const returnTo = (req.session as any)?.returnTo || '/app';
-      delete (req.session as any)?.returnTo;
-      console.log('🔄 Redirecting to:', returnTo);
-      res.redirect(returnTo);
+        
+        // CRITICAL: Save session explicitly and wait for it
+        try {
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((err: any) => {
+              if (err) {
+                console.error('❌ Session save error in callback:', err);
+                reject(err);
+              } else {
+                console.log('✅ Session explicitly saved after req.login()');
+                resolve();
+              }
+            });
+          });
+        } catch (sessionError: any) {
+          console.error('❌ Session save error:', sessionError);
+          // Continue anyway - req.login() should have saved it
+        }
+        
+        // Redirect to app
+        const returnTo = (req.session as any)?.returnTo || '/app';
+        delete (req.session as any)?.returnTo;
+        console.log('🔄 Redirecting to:', returnTo);
+        res.redirect(returnTo);
+      });
     });
   } catch (error: any) {
     console.error('❌ Unexpected error in callback handler:', error);
