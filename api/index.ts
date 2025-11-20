@@ -368,6 +368,8 @@ app.get('/auth/google', (req: any, res: any, _next: any) => {
 // CRITICAL: This route MUST execute - if it doesn't, we'll show an error page
 // CRITICAL: Register this BEFORE initializeApp() to ensure it's always available
 // CRITICAL: This route is registered at the TOP LEVEL, synchronously, so it's always available
+// CRITICAL: This route MUST be registered at the TOP LEVEL, synchronously
+// It's registered BEFORE initializeApp() so it's always available
 app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   // CRITICAL: Log immediately to confirm route is hit - if you don't see this, the route isn't being matched
   console.log('🔍🔍🔍 /auth/google/callback route hit!');
@@ -375,6 +377,7 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   console.log('📋 Request method:', req.method);
   console.log('📋 Request path:', req.path);
   console.log('📋 Request originalUrl:', req.originalUrl);
+  console.log('📋 Query params:', req.query);
   console.log('🔍 FULL REQUEST INFO:', {
     method: req.method,
     path: req.path,
@@ -437,11 +440,12 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
     
     // CRITICAL: Don't block OAuth if tables don't exist
     // Passport's user creation will handle table creation via upsertUser
-    // If tables don't exist, just log a warning and proceed
+    // If tables don't exist, just log a warning and proceed IMMEDIATELY
+    // DO NOT wait for migrations - they timeout and block everything
     if (!tablesExist) {
-      console.warn('⚠️ Tables not found, but proceeding with OAuth - user creation will handle it');
-      // Don't wait for migrations - proceed immediately
-      // The upsertUser function will create tables if needed
+      console.warn('⚠️ Tables not found, but proceeding with OAuth immediately - user creation will handle it');
+      console.warn('⚠️ NOT waiting for migrations - they timeout and block OAuth');
+      // Proceed immediately - don't wait
     }
     
     console.log('✅ Proceeding with authentication (tables exist: ' + tablesExist + ')...');

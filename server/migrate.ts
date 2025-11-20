@@ -480,9 +480,16 @@ export async function ensureTablesExist(): Promise<boolean> {
         const tableNameMatch = stmtTrimmed.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?(\w+)["']?/i);
         const tableName = tableNameMatch ? tableNameMatch[1].toLowerCase() : '';
         
-        if (tableName === 'users' || stmtTrimmed.includes('"users"') || stmtTrimmed.includes("'users'")) {
+        // More comprehensive check - look for users table by name or content
+        const isUsersTable = tableName === 'users' || 
+                             stmtTrimmed.includes('"users"') || 
+                             stmtTrimmed.includes("'users'") ||
+                             (stmtTrimmed.includes('CREATE TABLE') && stmtTrimmed.includes('users') && stmtTrimmed.includes('email'));
+        
+        if (isUsersTable) {
           usersTableStatements.push(stmt);
           console.log('✅ Detected users table CREATE statement');
+          console.log(`📋 Table name from regex: ${tableName}`);
           console.log(`📋 Users table statement preview: ${stmtTrimmed.substring(0, 200)}...`);
         } else {
           otherTableStatements.push(stmt);
