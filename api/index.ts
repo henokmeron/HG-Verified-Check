@@ -412,41 +412,10 @@ app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
   }
   
   try {
-    // CRITICAL: Wait for migrations to complete before proceeding
-    // This ensures tables exist before attempting authentication
-    console.log('📦 Waiting for database migrations to complete...');
-    
-    let tablesExist = false;
-    let migrationCompleted = false;
-    
-    // First, check if tables already exist
-    try {
-      // @ts-ignore
-      const { pool } = await import('../dist/server/db.js');
-      if (pool) {
-        const checkResult = await pool.query(`
-          SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name = 'users'
-          );
-        `);
-        tablesExist = checkResult.rows[0]?.exists || false;
-        console.log(`📋 Initial table check: ${tablesExist ? '✅ YES' : '❌ NO'}`);
-      }
-    } catch (checkError: any) {
-      console.error('❌ Error checking tables:', checkError?.message);
-    }
-    
-    // CRITICAL: Don't block OAuth if tables don't exist
-    // Passport's user creation will handle table creation via upsertUser
-    // If tables don't exist, just log a warning and proceed IMMEDIATELY
-    // DO NOT wait for migrations - they timeout and block everything
-    if (!tablesExist) {
-      console.warn('⚠️ Tables not found, but proceeding with OAuth immediately - user creation will handle it');
-      console.warn('⚠️ NOT waiting for migrations - they timeout and block OAuth');
-      // Proceed immediately - don't wait
-    }
+    // CRITICAL: DO NOT wait for migrations - they timeout and block OAuth
+    // Proceed immediately with authentication - Passport will handle user creation
+    // The upsertUser function will create tables if needed
+    console.log('✅ Proceeding with OAuth immediately - not waiting for migrations');
     
     console.log('✅ Proceeding with authentication (tables exist: ' + tablesExist + ')...');
     
