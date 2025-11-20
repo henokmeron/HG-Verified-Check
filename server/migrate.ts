@@ -464,9 +464,13 @@ export async function ensureTablesExist(): Promise<boolean> {
       // Debug: Log first 150 chars of each CREATE TABLE statement
       if (upperStmt.startsWith('CREATE TABLE')) {
         console.log(`🔍 Found CREATE TABLE statement (first 150 chars): ${stmtTrimmed.substring(0, 150)}`);
-        // Check if it's users table
-        if (stmtTrimmed.includes('"users"') || stmtTrimmed.includes("'users'")) {
-          console.log('✅ This is the USERS table!');
+        // Check if it's users table - look for the actual table name
+        const hasUsersInName = stmtTrimmed.includes('"users"') || stmtTrimmed.includes("'users'");
+        const hasEmailColumn = stmtTrimmed.includes('"email"') || stmtTrimmed.includes("'email'");
+        if (hasUsersInName) {
+          console.log('✅ This is the USERS table! (detected by name)');
+        } else if (hasEmailColumn && stmtTrimmed.includes('CREATE TABLE')) {
+          console.log('⚠️ Found table with email column - might be users table');
         }
       }
       
@@ -481,10 +485,16 @@ export async function ensureTablesExist(): Promise<boolean> {
         const tableName = tableNameMatch ? tableNameMatch[1].toLowerCase() : '';
         
         // More comprehensive check - look for users table by name or content
+        // CRITICAL: Check for "users" in quotes first, then check for email column as fallback
+        const hasUsersInQuotes = stmtTrimmed.includes('"users"') || stmtTrimmed.includes("'users'");
+        const hasEmailColumn = stmtTrimmed.includes('"email"') || stmtTrimmed.includes("'email'");
         const isUsersTable = tableName === 'users' || 
-                             stmtTrimmed.includes('"users"') || 
-                             stmtTrimmed.includes("'users'") ||
-                             (stmtTrimmed.includes('CREATE TABLE') && stmtTrimmed.includes('users') && stmtTrimmed.includes('email'));
+                             hasUsersInQuotes ||
+                             (hasEmailColumn && stmtTrimmed.includes('CREATE TABLE') && stmtTrimmed.includes('UNIQUE'));
+        
+        if (isUsersTable && !hasUsersInQuotes) {
+          console.log('⚠️ Detected users table by email column fallback');
+        }
         
         if (isUsersTable) {
           usersTableStatements.push(stmt);
