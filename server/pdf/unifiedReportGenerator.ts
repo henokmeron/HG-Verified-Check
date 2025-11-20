@@ -15,26 +15,39 @@ let VehicleReportComponent: any = null;
 async function loadReactComponents() {
   if (VehicleReportComponent) return VehicleReportComponent;
   
-  // Try multiple import strategies
+  // Try multiple import strategies - need to handle .tsx files in serverless
   const importAttempts = [
-    // Try relative path from dist/server/pdf to client/src
+    // Try relative path from dist/server/pdf to client/src (with .tsx extension)
     async () => {
-      const mod = await import('../../client/src/report/VehicleReport.js');
-      return mod.VehicleReport || mod.default;
+      try {
+        const mod = await import('../../client/src/report/VehicleReport.tsx');
+        return mod.VehicleReport || mod.default;
+      } catch {
+        // Try .js extension
+        const mod = await import('../../client/src/report/VehicleReport.js');
+        return mod.VehicleReport || mod.default;
+      }
     },
     // Try from project root
     async () => {
-      const mod = await import('../../../client/src/report/VehicleReport.js');
-      return mod.VehicleReport || mod.default;
+      try {
+        const mod = await import('../../../client/src/report/VehicleReport.tsx');
+        return mod.VehicleReport || mod.default;
+      } catch {
+        const mod = await import('../../../client/src/report/VehicleReport.js');
+        return mod.VehicleReport || mod.default;
+      }
     },
   ];
   
   for (const attempt of importAttempts) {
     try {
       VehicleReportComponent = await attempt();
-      if (VehicleReportComponent) {
+      if (VehicleReportComponent && typeof VehicleReportComponent === 'function') {
         console.log('✅ VehicleReport component loaded successfully');
         return VehicleReportComponent;
+      } else {
+        console.log('⚠️ Component loaded but is not a function:', typeof VehicleReportComponent);
       }
     } catch (error: any) {
       console.log('⚠️ Import attempt failed:', error.message);
@@ -44,7 +57,7 @@ async function loadReactComponents() {
   
   // If all imports fail, throw descriptive error
   const errorMsg = 
-    'VehicleReport component not found. ' +
+    'VehicleReport component not found or invalid. ' +
     'Client components are not available in serverless build. ' +
     'The PDF generator requires React components to be built and accessible.';
   console.error('❌', errorMsg);
@@ -233,11 +246,15 @@ export async function generateUnifiedPDF(
     console.log('  - Combined MPG:', fuelData?.CombinedMpg || 'N/A');
     console.log('  - Vehicle Data exists:', !!vehicleData);
     
-    // Load React components before rendering
-    const VehicleReport = await loadReactComponents();
-    
     // Load React component before rendering
-    const VehicleReport = await loadReactComponents();
+    let VehicleReport: any;
+    try {
+      VehicleReport = await loadReactComponents();
+    } catch (error: any) {
+      console.error('❌ Failed to load React component, using HTML fallback:', error.message);
+      // Use HTML template fallback instead
+      return await generateHTMLFallbackPDF(vehicleData, cleanedReportRaw, isPremium, checkDate, reportReference, registration, reportCSS, logoUrl);
+    }
     
     // Render React component to HTML
     // Use cleanedReportRaw to ensure hidden fields are not rendered

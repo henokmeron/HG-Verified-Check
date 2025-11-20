@@ -89,6 +89,10 @@ export function configurePassport() {
             
             if (user) {
               console.log('🔄 Updating existing user:', user.id);
+              // Set admin role for specific admin email if not already admin
+              const isAdminEmail = email === 'hgerez91@gmail.com' || email === 'nokhen330@gmail.com';
+              const shouldBeAdmin = isAdminEmail && user.role !== 'admin';
+              
               // Update existing user with Google provider info
               user = await storage.upsertUser({
                 id: user.id,
@@ -99,9 +103,9 @@ export function configurePassport() {
                 authProvider: "google",
                 providerId: profile.id,
                 lastLoginAt: new Date(),
-                creditBalance: user.creditBalance,
+                creditBalance: shouldBeAdmin ? 10000 : user.creditBalance,
                 stripeCustomerId: user.stripeCustomerId,
-                role: user.role,
+                role: shouldBeAdmin ? "admin" : user.role, // Upgrade to admin if admin email
                 isActive: user.isActive,
                 preferences: user.preferences,
                 passwordHash: user.passwordHash,
@@ -109,8 +113,14 @@ export function configurePassport() {
                 mfaEnabled: user.mfaEnabled,
                 lastLoginIp: user.lastLoginIp,
               });
+              
+              if (shouldBeAdmin) {
+                console.log('✅ User upgraded to admin:', email);
+              }
             } else {
               console.log('➕ Creating new user');
+              // Set admin role for specific admin email
+              const isAdminEmail = email === 'hgerez91@gmail.com' || email === 'nokhen330@gmail.com';
               // Create new user
               user = await storage.upsertUser({
                 email,
@@ -121,8 +131,8 @@ export function configurePassport() {
                 providerId: profile.id,
                 emailVerified: true,
                 lastLoginAt: new Date(),
-                creditBalance: 0,
-                role: "user",
+                creditBalance: isAdminEmail ? 10000 : 0,
+                role: isAdminEmail ? "admin" : "user",
                 isActive: true,
               });
             }
