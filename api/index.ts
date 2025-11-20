@@ -353,9 +353,11 @@ app.get('/auth/google', (req: any, res: any, _next: any) => {
 
 // Register callback route - MUST be before any other route handlers that might match
 // CRITICAL: This route MUST execute - if it doesn't, we'll show an error page
+// CRITICAL: Register this BEFORE initializeApp() to ensure it's always available
 app.get('/auth/google/callback', async (req: any, res: any, _next: any) => {
-  console.log('🔍 /auth/google/callback route hit!');
-  console.log('✅ Callback handler is executing!');
+  // CRITICAL: Log immediately to confirm route is hit
+  console.log('🔍🔍🔍 /auth/google/callback route hit!');
+  console.log('✅✅✅ Callback handler is executing!');
   console.log('🔍 FULL REQUEST INFO:', {
     method: req.method,
     path: req.path,
