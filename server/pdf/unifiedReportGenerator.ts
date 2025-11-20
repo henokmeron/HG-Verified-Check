@@ -95,6 +95,120 @@ async function loadSchema(): Promise<VidicheckSchema> {
   return {} as VidicheckSchema;
 }
 
+// Fallback HTML generator when React components aren't available
+async function generateHTMLFallbackPDF(
+  vehicleData: any,
+  reportRaw: any,
+  isPremium: boolean,
+  dateOfCheck: Date | string,
+  reference: string,
+  registration: string,
+  css: string,
+  logoUrl: string
+): Promise<Buffer> {
+  console.log('📄 Using HTML fallback for PDF generation');
+  
+  const vehicleDetails = reportRaw?.Results?.VehicleDetails || {};
+  const vehicleId = vehicleDetails.VehicleIdentification || {};
+  const modelDetails = reportRaw?.Results?.ModelDetails || {};
+  
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    ${css}
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .header { text-align: center; margin-bottom: 30px; }
+    .logo { max-width: 200px; margin-bottom: 20px; }
+    h1 { color: #0b5fff; margin: 0; }
+    .registration { font-size: 24px; font-weight: bold; margin: 20px 0; }
+    .section { margin: 30px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+    .section h2 { color: #0b5fff; border-bottom: 2px solid #0b5fff; padding-bottom: 10px; }
+    .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+    .detail-label { font-weight: bold; color: #666; }
+    .detail-value { color: #333; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo">` : ''}
+    <h1>Vehicle Check Report</h1>
+    <p>HG Verified Vehicle Check</p>
+    <div class="registration">Registration: ${registration}</div>
+    <p>Date of Check: ${new Date(dateOfCheck).toLocaleDateString()}</p>
+    <p>Reference: ${reference}</p>
+  </div>
+  
+  <div class="section">
+    <h2>Vehicle Identification</h2>
+    <div class="detail-row">
+      <span class="detail-label">VRM:</span>
+      <span class="detail-value">${vehicleId.Vrm || registration}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">DVLA Make:</span>
+      <span class="detail-value">${vehicleId.DvlaMake || 'N/A'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">DVLA Model:</span>
+      <span class="detail-value">${vehicleId.DvlaModel || 'N/A'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Date First Registered:</span>
+      <span class="detail-value">${vehicleId.DateFirstRegisteredInUk || 'N/A'}</span>
+    </div>
+  </div>
+  
+  ${modelDetails.Performance ? `
+  <div class="section">
+    <h2>Performance</h2>
+    ${modelDetails.Performance.FuelEconomy ? `
+    <div class="detail-row">
+      <span class="detail-label">Combined MPG:</span>
+      <span class="detail-value">${modelDetails.Performance.FuelEconomy.CombinedMpg || 'N/A'}</span>
+    </div>
+    ` : ''}
+  </div>
+  ` : ''}
+  
+  ${reportRaw?.Results?.MotHistoryDetails ? `
+  <div class="section">
+    <h2>MOT History</h2>
+    <p>${reportRaw.Results.MotHistoryDetails.MotTestDetailsList?.length || 0} MOT test(s) found</p>
+  </div>
+  ` : ''}
+</body>
+</html>
+  `;
+  
+  // Generate PDF using Puppeteer
+  const isVercel = process.env.VERCEL === '1';
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: isVercel ? [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu'
+    ] : []
+  });
+  
+  const page = await browser.newPage();
+  await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  
+  const pdfBuffer = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '0mm', right: '12mm', bottom: '10mm', left: '12mm' },
+    timeout: 30000
+  });
+  
+  await browser.close();
+  return Buffer.from(pdfBuffer);
+}
+
 // Define package documents - matching the actual Free Check schema from portal.vehicledataglobal.com
 // FREE CHECK (Freecheckapi) includes only: VehicleDetails, ModelDetails, MotHistoryDetails, VehicleTaxDetails
 // Note: VehicleHistory and DvlaTechnicalDetails are NESTED inside VehicleDetails, not separate sections
