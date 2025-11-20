@@ -69,37 +69,18 @@ export function configurePassport() {
                 console.error('❌ Database tables not found. Attempting to run migrations...');
                 console.error('❌ Error:', errorMessage);
                 
-                // Try to run migrations now with retries
-                try {
-                  // @ts-ignore - dist files are generated at build time
-                  // From dist/server/auth/passport.js, we need to go up one level to dist/server/
-                  const { ensureTablesExist } = await import('../migrate.js');
-                  
-                  // Retry migration up to 5 times with delays
-                  let migrationResult = false;
-                  for (let i = 0; i < 5; i++) {
-                    migrationResult = await ensureTablesExist();
-                    if (migrationResult) {
-                      break;
-                    }
-                    console.log(`⏳ Migration attempt ${i + 1}/5, waiting before retry...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                  }
-                  
-                  if (migrationResult) {
-                    console.log('✅ Migrations completed, retrying user lookup...');
-                    // Retry the user lookup
-                    user = await storage.getUserByEmail(email);
-                    console.log('📋 User exists after migration:', !!user);
-                  } else {
-                    console.error('❌ Migrations failed after retries');
-                    return done(new Error("Database tables not initialized. Please wait a moment and try again."), null);
-                  }
-                } catch (migrationError: any) {
-                  console.error('❌ Migration retry failed:', migrationError?.message || migrationError);
-                  console.error('❌ Migration error stack:', migrationError?.stack);
-                  return done(new Error("Database tables not initialized. Please wait a moment and try again."), null);
-                }
+                // CRITICAL: DO NOT RUN MIGRATIONS HERE - they timeout and block OAuth
+                // Tables MUST be manually created in Neon Console using MANUAL-MIGRATION-NEON.sql
+                console.error('❌ Database tables do not exist');
+                console.error('❌ Please run the SQL script from MANUAL-MIGRATION-NEON.sql in Neon Console');
+                console.error('❌ Or run the QUICK-FIX-SESSION-PKEY.sql script to quickly create tables');
+                return done(
+                  new Error(
+                    'Database not ready. Please create tables manually in Neon Console using MANUAL-MIGRATION-NEON.sql. ' +
+                    'Automated migrations timeout in serverless environment.'
+                  ),
+                  null
+                );
               } else {
                 // Re-throw other errors
                 throw error;
