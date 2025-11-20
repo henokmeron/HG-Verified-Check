@@ -18,20 +18,44 @@ import * as path from 'path';
 
 let stripe: Stripe | null = null;
 
-try {
-  if (!process.env.STRIPE_SECRET_KEY) {
-    console.error(
-      "❌ STRIPE_SECRET_KEY environment variable is missing. Please configure it in the Deployments pane Configuration tab."
-    );
-    throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+// Initialize Stripe on module load
+(function initializeStripe() {
+  try {
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    
+    // Debug logging (without exposing the actual key)
+    console.log('🔍 Stripe initialization check:', {
+      hasKey: !!stripeKey,
+      keyLength: stripeKey?.length || 0,
+      keyPrefix: stripeKey ? `${stripeKey.substring(0, 7)}...` : 'none',
+      nodeEnv: process.env.NODE_ENV,
+      vercel: process.env.VERCEL,
+      allEnvKeys: Object.keys(process.env).filter(k => k.includes('STRIPE')).join(', ') || 'none'
+    });
+    
+    if (!stripeKey || stripeKey.trim() === '') {
+      console.error(
+        "❌ STRIPE_SECRET_KEY environment variable is missing or empty."
+      );
+      console.error("📝 To fix: Go to Vercel Dashboard → Your Project → Settings → Environment Variables");
+      console.error("📝 Add STRIPE_SECRET_KEY with your Stripe secret key (starts with sk_)");
+      console.error("📝 Then redeploy your application");
+      throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+    }
+    
+    if (!stripeKey.startsWith('sk_')) {
+      console.error('❌ STRIPE_SECRET_KEY format is invalid - must start with "sk_"');
+      throw new Error('Invalid Stripe secret key format');
+    }
+    
+    stripe = new Stripe(stripeKey);
+    console.log('✅ Stripe initialized successfully');
+  } catch (error) {
+    console.error('❌ Stripe initialization failed:', (error as Error).message);
+    console.error('⚠️ Payment functionality will be disabled until STRIPE_SECRET_KEY is configured.');
+    stripe = null; // Explicitly set to null
   }
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  console.log('✅ Stripe initialized successfully');
-} catch (error) {
-  console.error('❌ Stripe initialization failed:', (error as Error).message);
-  console.error('Payment functionality will be disabled until STRIPE_SECRET_KEY is configured.');
-  // Don't throw here - allow server to start but disable Stripe functionality
-}
+})();
 
 // Mock implementations for functions used in the changes, as they are not provided in the original code.
 // In a real application, these would interact with a database or authentication service.
