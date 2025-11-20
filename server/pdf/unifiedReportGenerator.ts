@@ -1,9 +1,5 @@
 import ReactDOMServer from 'react-dom/server';
 import React from 'react';
-import { VehicleReport } from '../../client/src/report/VehicleReport';
-import { MileageGraph } from '../../client/src/report/MileageGraph';
-import { FuelEfficiencyChart } from '../../client/src/report/FuelEfficiencyChart';
-import { MotHistory } from '../../client/src/report/MotHistory';
 import { VidicheckSchema } from '../../client/src/report/types';
 import fs from 'fs/promises';
 import path from 'path';
@@ -11,6 +7,63 @@ import { fileURLToPath } from 'url';
 // Use puppeteer-core with @sparticuz/chromium for Vercel serverless
 // Fallback to regular puppeteer for local development
 import puppeteer from 'puppeteer';
+
+// Dynamic imports for React components - handle cases where they're not available
+let VehicleReport: any = null;
+let MileageGraph: any = null;
+let FuelEfficiencyChart: any = null;
+let MotHistory: any = null;
+
+// Try to load React components - they may not be available in serverless builds
+async function loadReactComponents() {
+  if (VehicleReport) return; // Already loaded
+  
+  const possiblePaths = [
+    '../../client/src/report/VehicleReport',
+    '../../../client/src/report/VehicleReport',
+    '../../dist/client/src/report/VehicleReport',
+    '../../../dist/client/src/report/VehicleReport',
+    './VehicleReport', // Fallback
+  ];
+  
+  for (const componentPath of possiblePaths) {
+    try {
+      const VehicleReportModule = await import(componentPath + '.js');
+      VehicleReport = VehicleReportModule.VehicleReport;
+      
+      // Try to load other components from same directory
+      try {
+        const MileageGraphModule = await import(componentPath.replace('VehicleReport', 'MileageGraph') + '.js');
+        MileageGraph = MileageGraphModule.MileageGraph;
+      } catch {}
+      
+      try {
+        const FuelEfficiencyChartModule = await import(componentPath.replace('VehicleReport', 'FuelEfficiencyChart') + '.js');
+        FuelEfficiencyChart = FuelEfficiencyChartModule.FuelEfficiencyChart;
+      } catch {}
+      
+      try {
+        const MotHistoryModule = await import(componentPath.replace('VehicleReport', 'MotHistory') + '.js');
+        MotHistory = MotHistoryModule.MotHistory;
+      } catch {}
+      
+      console.log('✅ React components loaded from:', componentPath);
+      return;
+    } catch (error) {
+      continue; // Try next path
+    }
+  }
+  
+  // If all paths fail, create minimal fallback components
+  console.warn('⚠️ Could not load React components, using fallback HTML generation');
+  VehicleReport = ({ payload, registration, dateOfCheck }: any) => {
+    return React.createElement('div', { className: 'vehicle-report' },
+      React.createElement('h1', {}, `Vehicle Report: ${registration || 'N/A'}`),
+      React.createElement('p', {}, `Date of Check: ${dateOfCheck || new Date().toISOString()}`),
+      React.createElement('pre', {}, JSON.stringify(payload, null, 2))
+    );
+  };
+}
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -193,6 +246,9 @@ export async function generateUnifiedPDF(
     console.log('  - Fuel Economy exists:', !!fuelData);
     console.log('  - Combined MPG:', fuelData?.CombinedMpg || 'N/A');
     console.log('  - Vehicle Data exists:', !!vehicleData);
+    
+    // Load React components before rendering
+    const VehicleReport = await loadReactComponents();
     
     // Render React component to HTML
     // Use cleanedReportRaw to ensure hidden fields are not rendered
