@@ -39,7 +39,8 @@ EXCEPTION
     DROP TABLE IF EXISTS "sessions" CASCADE;
 END $$;
 
--- Comprehensive schema with all columns
+-- USERS TABLE - CRITICAL: This MUST be created FIRST before any other tables
+-- All other tables reference this via foreign keys
 CREATE TABLE IF NOT EXISTS "users" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"email" varchar UNIQUE NOT NULL,
