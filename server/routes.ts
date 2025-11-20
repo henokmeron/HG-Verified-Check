@@ -1820,9 +1820,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             const { emailService } = await import('./services/EmailService');
             const { generateUnifiedPDF } = await import('./pdf/unifiedReportGenerator');
-            const userEmail = process.env.REPL_ID 
-              ? req.user?.claims?.email 
-              : (req.session as any)?.userEmail;
+            // Get user email - support Passport (production), Replit, and local dev
+            let userEmail: string | undefined;
+            if (process.env.REPL_ID) {
+              userEmail = req.user?.claims?.email;
+            } else {
+              // Passport auth (production) or local dev
+              userEmail = req.user?.email || (req.session as any)?.userEmail;
+            }
             
             if (userId && userEmail) {
               // Ensure email service is ready before sending
@@ -2007,16 +2012,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const { emailService } = await import('./services/EmailService');
         const { generateUnifiedPDF } = await import('./pdf/unifiedReportGenerator');
-        // Get user email from multiple sources
+        // Get user email - support Passport (production), Replit, and local dev
         let userEmail: string | undefined;
         if (process.env.REPL_ID) {
           userEmail = req.user?.claims?.email;
         } else {
-          // Try to get email from session or user object
-          userEmail = (req.session as any)?.userEmail || 
-                     (req.session as any)?.user?.email ||
-                     req.user?.email ||
-                     "demo@autocheckpro.com";
+          // Passport auth (production) or local dev
+          userEmail = req.user?.email || (req.session as any)?.userEmail || "demo@autocheckpro.com";
         }
         
         console.log('📧 Email sending check:', {
@@ -2278,7 +2280,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate PDF for individual vehicle lookup
   app.get('/api/vehicle-lookup/:id/pdf', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      // Get user ID - support Passport (production), Replit, and local dev
+      let userId: string | undefined;
+      if (process.env.REPL_ID) {
+        userId = req.user?.claims?.sub;
+      } else {
+        // Passport auth (production) or local dev
+        userId = req.user?.id || (req.session as any)?.userId;
+      }
+      
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
       const { id } = req.params;
       
       const lookup = await storage.getVehicleLookupById(id);
@@ -3220,16 +3234,34 @@ For support, contact: support@hgverifiedvehiclecheck.com
 
   app.post('/api/create-payment-intent', async (req: any, res) => {
     try {
-      // Check authentication - support both Passport and local dev session
-      const isAuthenticated = process.env.REPL_ID 
-        ? (req.user && req.user.claims && req.user.claims.sub)
-        : (req.session?.userLoggedIn && req.session?.userId);
+      // Check authentication - support Passport (production), Replit, and local dev
+      let isAuthenticated = false;
+      let userId: string | undefined;
       
-      if (!isAuthenticated) {
+      if (process.env.REPL_ID) {
+        // Replit auth
+        isAuthenticated = !!(req.user && req.user.claims && req.user.claims.sub);
+        userId = req.user?.claims?.sub;
+      } else {
+        // Passport auth (production) or local dev
+        const isPassportAuth = (req as any).isAuthenticated && (req as any).isAuthenticated();
+        const isLocalDevAuth = !process.env.VERCEL && (req.session as any)?.userLoggedIn;
+        isAuthenticated = isPassportAuth || isLocalDevAuth;
+        
+        if (isPassportAuth) {
+          userId = req.user?.id; // Passport stores user.id
+        } else if (isLocalDevAuth) {
+          userId = req.session?.userId;
+        }
+      }
+      
+      if (!isAuthenticated || !userId) {
         console.log('❌ Payment intent: User not authenticated', {
           hasSession: !!req.session,
-          userLoggedIn: req.session?.userLoggedIn,
-          userId: req.session?.userId
+          hasUser: !!req.user,
+          isPassportAuth: (req as any).isAuthenticated && (req as any).isAuthenticated(),
+          userId: userId,
+          userEmail: req.user?.email
         });
         return res.status(401).json({ message: "Authentication required" });
       }
@@ -3244,11 +3276,6 @@ For support, contact: support@hgverifiedvehiclecheck.com
         console.error('STRIPE_SECRET_KEY length:', process.env.STRIPE_SECRET_KEY?.length || 0);
         return res.status(500).json({ error: 'Payment processing is unavailable. Please contact support.' });
       }
-      
-      // Get user ID based on authentication method
-      const userId = process.env.REPL_ID 
-        ? req.user?.claims?.sub 
-        : (req.session?.userId || "demo-user");
       
       console.log('💳 Creating payment intent for user:', userId, 'amount:', amount, 'credits:', credits);
       console.log('💳 Stripe instance available:', !!stripe);
