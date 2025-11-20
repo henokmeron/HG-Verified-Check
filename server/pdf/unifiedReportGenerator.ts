@@ -9,60 +9,46 @@ import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
 
 // Dynamic imports for React components - handle cases where they're not available
-let VehicleReport: any = null;
-let MileageGraph: any = null;
-let FuelEfficiencyChart: any = null;
-let MotHistory: any = null;
+let VehicleReportComponent: any = null;
 
-// Try to load React components - they may not be available in serverless builds
+// Try to load React components - handle serverless environment where source files may not be available
 async function loadReactComponents() {
-  if (VehicleReport) return; // Already loaded
+  if (VehicleReportComponent) return VehicleReportComponent;
   
-  const possiblePaths = [
-    '../../client/src/report/VehicleReport',
-    '../../../client/src/report/VehicleReport',
-    '../../dist/client/src/report/VehicleReport',
-    '../../../dist/client/src/report/VehicleReport',
-    './VehicleReport', // Fallback
+  // Try multiple import strategies
+  const importAttempts = [
+    // Try relative path from dist/server/pdf to client/src
+    async () => {
+      const mod = await import('../../client/src/report/VehicleReport.js');
+      return mod.VehicleReport || mod.default;
+    },
+    // Try from project root
+    async () => {
+      const mod = await import('../../../client/src/report/VehicleReport.js');
+      return mod.VehicleReport || mod.default;
+    },
   ];
   
-  for (const componentPath of possiblePaths) {
+  for (const attempt of importAttempts) {
     try {
-      const VehicleReportModule = await import(componentPath + '.js');
-      VehicleReport = VehicleReportModule.VehicleReport;
-      
-      // Try to load other components from same directory
-      try {
-        const MileageGraphModule = await import(componentPath.replace('VehicleReport', 'MileageGraph') + '.js');
-        MileageGraph = MileageGraphModule.MileageGraph;
-      } catch {}
-      
-      try {
-        const FuelEfficiencyChartModule = await import(componentPath.replace('VehicleReport', 'FuelEfficiencyChart') + '.js');
-        FuelEfficiencyChart = FuelEfficiencyChartModule.FuelEfficiencyChart;
-      } catch {}
-      
-      try {
-        const MotHistoryModule = await import(componentPath.replace('VehicleReport', 'MotHistory') + '.js');
-        MotHistory = MotHistoryModule.MotHistory;
-      } catch {}
-      
-      console.log('✅ React components loaded from:', componentPath);
-      return;
-    } catch (error) {
-      continue; // Try next path
+      VehicleReportComponent = await attempt();
+      if (VehicleReportComponent) {
+        console.log('✅ VehicleReport component loaded successfully');
+        return VehicleReportComponent;
+      }
+    } catch (error: any) {
+      console.log('⚠️ Import attempt failed:', error.message);
+      continue;
     }
   }
   
-  // If all paths fail, create minimal fallback components
-  console.warn('⚠️ Could not load React components, using fallback HTML generation');
-  VehicleReport = ({ payload, registration, dateOfCheck }: any) => {
-    return React.createElement('div', { className: 'vehicle-report' },
-      React.createElement('h1', {}, `Vehicle Report: ${registration || 'N/A'}`),
-      React.createElement('p', {}, `Date of Check: ${dateOfCheck || new Date().toISOString()}`),
-      React.createElement('pre', {}, JSON.stringify(payload, null, 2))
-    );
-  };
+  // If all imports fail, throw descriptive error
+  const errorMsg = 
+    'VehicleReport component not found. ' +
+    'Client components are not available in serverless build. ' +
+    'The PDF generator requires React components to be built and accessible.';
+  console.error('❌', errorMsg);
+  throw new Error(errorMsg);
 }
 
 // Get __dirname equivalent for ES modules
@@ -248,6 +234,9 @@ export async function generateUnifiedPDF(
     console.log('  - Vehicle Data exists:', !!vehicleData);
     
     // Load React components before rendering
+    const VehicleReport = await loadReactComponents();
+    
+    // Load React component before rendering
     const VehicleReport = await loadReactComponents();
     
     // Render React component to HTML
