@@ -78,8 +78,15 @@ CREATE TABLE "vehicle_lookups" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" varchar NOT NULL,
 	"registration" varchar NOT NULL,
-	"lookup_data" jsonb NOT NULL,
-	"credits_used" integer DEFAULT 1 NOT NULL,
+	"vehicle_data" jsonb,
+	"report_raw" jsonb,
+	"credits_cost" integer DEFAULT 1 NOT NULL,
+	"success" boolean DEFAULT true NOT NULL,
+	"error_message" text,
+	"report_type" varchar DEFAULT 'comprehensive' NOT NULL,
+	"processing_time" integer,
+	"api_provider" varchar DEFAULT 'vidcheck' NOT NULL,
+	"metadata" jsonb DEFAULT '{}',
 	"created_at" timestamp DEFAULT now()
 );
 
