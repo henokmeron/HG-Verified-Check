@@ -213,33 +213,11 @@ async function initializeApp() {
       // Setup static file serving for production
       serveStatic(app);
       
-      // Add a catch-all 404 handler AFTER all routes to debug
-      // CRITICAL: Don't catch auth routes - they're registered synchronously above
-      app.use((req: any, res: Response) => {
-        // Skip 404 for auth routes - they should be handled by routes registered above
-        if (req.path.startsWith('/auth/')) {
-          console.log('⚠️ 404 handler caught auth route - this should not happen');
-          console.log('⚠️ Route should have been handled by:', req.path);
-          // Don't send 404 - let it fall through or return error
-          return res.status(500).json({ 
-            message: `Auth route not handled: ${req.path}. This route should be registered synchronously above.`,
-            path: req.path,
-            originalUrl: req.originalUrl,
-            note: 'Check that /auth/google/callback route is registered before initializeApp()'
-          });
-        }
-        console.log('❌ 404 - No route matched:', {
-          method: req.method,
-          path: req.path,
-          originalUrl: req.originalUrl,
-          url: req.url
-        });
-        res.status(404).json({ 
-          message: `Cannot ${req.method} ${req.path}`,
-          path: req.path,
-          originalUrl: req.originalUrl
-        });
-      });
+      // CRITICAL: DON'T add 404 handler in initializeApp - it catches routes registered above
+      // The callback route is registered synchronously BEFORE initializeApp runs
+      // Adding a 404 handler here would catch it
+      // Let the main error handler (after routes) handle 404s
+      console.log('✅ Skipping 404 handler registration to prevent catching /auth/ routes');
       
       initialized = true;
       console.log('✅ App initialization complete');
@@ -695,13 +673,14 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
       return res.status(503).json({ message: 'OAuth not configured' });
     }
     
-    // For OAuth CALLBACK route, ignore the error and let the callback handler proceed
-    // The callback handler will handle user creation even if migrations failed
+    // For OAuth CALLBACK route, DON'T call _next() - it goes to 404 handler
+    // Instead, return without sending a response (let Express continue to the route)
     if (req.path === '/auth/google/callback' && req.method === 'GET') {
-      console.log('⚠️ Migration error for OAuth callback - ignoring error and continuing');
-      // Clear the error and continue to next handler (the route handler)
-      // This allows the callback route to process the request
-      return _next();
+      console.log('⚠️ Migration error for OAuth callback - ignoring error completely');
+      // DON'T call _next() - it would go to the 404 handler
+      // DON'T send a response - let Express continue processing
+      // Just return and let the route handler be invoked
+      return;
     }
   }
 
