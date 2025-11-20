@@ -636,13 +636,11 @@ async function ensureMigrationsRun(): Promise<boolean> {
   return migrationPromise;
 }
 
-// Start migration immediately (non-blocking for module load)
-// CRITICAL: Don't let migration errors block the app - catch and log them
-ensureMigrationsRun().catch((error: any) => {
-  console.error('⚠️ Migration startup error (non-fatal):', error?.message || error);
-  // Don't throw - allow the app to continue
-  // OAuth routes don't need database, so they can still work
-});
+// CRITICAL: Don't run migrations on startup - they timeout and block everything
+// Migrations will run in the background when needed, but won't block OAuth routes
+// OAuth routes work without database - user creation will handle table creation
+console.log('⚠️ Migrations disabled on startup to prevent timeouts');
+console.log('⚠️ OAuth routes will work without database - user creation will handle tables');
 
 // Initialize app in background (non-blocking)
 // Routes are already registered above, so they'll be matched before serveStatic's catch-all
