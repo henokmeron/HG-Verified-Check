@@ -214,7 +214,20 @@ async function initializeApp() {
       serveStatic(app);
       
       // Add a catch-all 404 handler AFTER all routes to debug
+      // CRITICAL: Don't catch auth routes - they're registered synchronously above
       app.use((req: any, res: Response) => {
+        // Skip 404 for auth routes - they should be handled by routes registered above
+        if (req.path.startsWith('/auth/')) {
+          console.log('⚠️ 404 handler caught auth route - this should not happen');
+          console.log('⚠️ Route should have been handled by:', req.path);
+          // Don't send 404 - let it fall through or return error
+          return res.status(500).json({ 
+            message: `Auth route not handled: ${req.path}. This route should be registered synchronously above.`,
+            path: req.path,
+            originalUrl: req.originalUrl,
+            note: 'Check that /auth/google/callback route is registered before initializeApp()'
+          });
+        }
         console.log('❌ 404 - No route matched:', {
           method: req.method,
           path: req.path,
