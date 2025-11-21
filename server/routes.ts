@@ -1843,7 +1843,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Automatically send PDF report via email for logged-in users
           try {
             const { emailService } = await import('./services/EmailService');
-            const { generateUnifiedPDF } = await import('./pdf/unifiedReportGenerator');
+            const { generateSimplePDF } = await import('./pdf/simplePdfGenerator');
             // Get user email - support Passport (production), Replit, and local dev
             let userEmail: string | undefined;
             if (process.env.REPL_ID) {
@@ -1860,7 +1860,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               if (isReady && hasTransporter) {
                 // Generate PDF and send email asynchronously (don't block response)
-                generateUnifiedPDF(vehicleData, reportRaw, false)
+                const dateOfCheck = reportRaw?.dateOfCheck || reportRaw?.checkTimestamp || new Date();
+                const reference = reportRaw?.reportReference || reportRaw?.Reference || cleanReg + '-' + Date.now();
+                generateSimplePDF(vehicleData, reportRaw, false, dateOfCheck, reference, cleanReg.toUpperCase())
                   .then((pdfBuffer) => {
                     return emailService.sendReportEmail(userEmail, pdfBuffer, cleanReg.toUpperCase());
                   })
@@ -1946,7 +1948,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (userId && userEmail) {
         try {
           const { emailService } = await import('./services/EmailService');
-          const { generateUnifiedPDF } = await import('./pdf/unifiedReportGenerator');
+          const { generateSimplePDF } = await import('./pdf/simplePdfGenerator');
           
           // Ensure email service is ready before sending
           const isReady = await emailService.ensureReady();
@@ -1954,7 +1956,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (isReady && hasTransporter) {
             // Generate PDF and send email asynchronously (don't block response)
-            generateUnifiedPDF(vehicleData, reportRaw, false)
+            const dateOfCheck = reportRaw?.dateOfCheck || reportRaw?.checkTimestamp || new Date();
+            const reference = reportRaw?.reportReference || reportRaw?.Reference || regNumber + '-' + Date.now();
+            generateSimplePDF(vehicleData, reportRaw, false, dateOfCheck, reference, regNumber.trim().toUpperCase())
               .then((pdfBuffer) => {
                 return emailService.sendReportEmail(userEmail, pdfBuffer, regNumber.trim().toUpperCase());
               })
@@ -2035,7 +2039,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Automatically send PDF report via email for logged-in users
       try {
         const { emailService } = await import('./services/EmailService');
-        const { generateUnifiedPDF } = await import('./pdf/unifiedReportGenerator');
+        const { generateSimplePDF } = await import('./pdf/simplePdfGenerator');
         // Get user email - support Passport (production), Replit, and local dev
         let userEmail: string | undefined;
         if (process.env.REPL_ID) {
@@ -2064,7 +2068,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (isReady && hasTransporter) {
             // Generate PDF and send email asynchronously (don't block response)
-            generateUnifiedPDF(vehicleData, reportRaw, true)
+            const dateOfCheck = reportRaw?.dateOfCheck || reportRaw?.checkTimestamp || new Date();
+            const reference = reportRaw?.reportReference || reportRaw?.Reference || cleanReg + '-' + Date.now();
+            generateSimplePDF(vehicleData, reportRaw, true, dateOfCheck, reference, cleanReg.toUpperCase())
               .then((pdfBuffer) => {
                 return emailService.sendReportEmail(userEmail!, pdfBuffer, cleanReg.toUpperCase());
               })
@@ -2153,7 +2159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Automatically send PDF report via email for logged-in users
         try {
           const { emailService } = await import('./services/EmailService');
-          const { generateUnifiedPDF } = await import('./pdf/unifiedReportGenerator');
+          const { generateSimplePDF } = await import('./pdf/simplePdfGenerator');
           const userEmail = process.env.REPL_ID 
             ? req.user?.claims?.email 
             : (req.session as any)?.userEmail;
@@ -2165,7 +2171,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             if (isReady && hasTransporter) {
               // Generate PDF and send email asynchronously (don't block response)
-              generateUnifiedPDF(lookupResult.vehicleData, lookupResult.reportRaw, true)
+              const dateOfCheck = lookupResult.reportRaw?.dateOfCheck || lookupResult.reportRaw?.checkTimestamp || new Date();
+              const reference = lookupResult.reportRaw?.reportReference || lookupResult.reportRaw?.Reference || registration + '-' + Date.now();
+              generateSimplePDF(lookupResult.vehicleData, lookupResult.reportRaw, true, dateOfCheck, reference, registration.trim().toUpperCase())
                 .then((pdfBuffer) => {
                   return emailService.sendReportEmail(userEmail, pdfBuffer, registration.trim().toUpperCase());
                 })
@@ -2329,12 +2337,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No report data available for PDF generation" });
       }
       
-      // Import the unified PDF generator
-      const { generateUnifiedPDF } = await import('./pdf/unifiedReportGenerator');
+      // Import the simple PDF generator
+      const { generateSimplePDF } = await import('./pdf/simplePdfGenerator');
       
-      // Generate PDF using the unified report template
+      // Generate PDF using the simple PDF generator
       const isPremium = lookup.isPremium || false;
-      const pdfBuffer = await generateUnifiedPDF(lookup.vehicleData, lookup.reportRaw, isPremium);
+      const dateOfCheck = lookup.reportRaw?.dateOfCheck || lookup.reportRaw?.checkTimestamp || new Date();
+      const reference = lookup.reportRaw?.reportReference || lookup.reportRaw?.Reference || lookup.registration + '-' + Date.now();
+      const pdfBuffer = await generateSimplePDF(lookup.vehicleData, lookup.reportRaw, isPremium, dateOfCheck, reference, lookup.registration);
       
       // Return PDF for download
       res.setHeader('Content-Type', 'application/pdf');
@@ -3043,8 +3053,8 @@ For support, contact: support@hgverifiedvehiclecheck.com
 
       console.log('Creating comprehensive PDF document for:', registration);
       
-      // Import the unified PDF generator and email service
-      const { generateUnifiedPDF } = await import('./pdf/unifiedReportGenerator');
+      // Import the simple PDF generator and email service
+      const { generateSimplePDF } = await import('./pdf/simplePdfGenerator');
       const { emailService } = await import('./services/EmailService');
       
       // Ensure registration is in vehicleData if not already present
@@ -3058,11 +3068,13 @@ For support, contact: support@hgverifiedvehiclecheck.com
       console.log('  - vehicleData.registration:', finalVehicleData?.registration);
       console.log('  - reportRaw?.Results?.VehicleDetails?.VehicleIdentification?.Vrm:', reportRaw?.Results?.VehicleDetails?.VehicleIdentification?.Vrm);
       
-      // Generate PDF using the unified report template
+      // Generate PDF using simple jsPDF (works on Vercel serverless)
+      const { generateSimplePDF } = await import('./pdf/simplePdfGenerator');
       const isPremium = finalVehicleData?.isComprehensive || false;
       const dateOfCheck = reportRaw?.dateOfCheck || reportRaw?.checkTimestamp || new Date();
       const reference = reportRaw?.reportReference || reportRaw?.Reference || nanoid(12).toUpperCase();
-      const pdfBuffer = await generateUnifiedPDF(finalVehicleData, reportRaw, isPremium, dateOfCheck, reference);
+      const registration = finalVehicleData?.registration || reportRaw?.Results?.VehicleDetails?.VehicleIdentification?.Vrm || 'UNKNOWN';
+      const pdfBuffer = await generateSimplePDF(finalVehicleData, reportRaw, isPremium, dateOfCheck, reference, registration);
       
       console.log('Comprehensive PDF generated successfully, size:', pdfBuffer.length, 'bytes');
 
