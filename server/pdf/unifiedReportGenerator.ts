@@ -277,11 +277,22 @@ async function generateHTMLFallbackPDF(
       const executablePath = await chromium.default.executablePath();
       console.log('✅ [Fallback] Chromium executable path obtained');
       
+      // Configure Chromium for serverless
+      await chromium.default.font('https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf');
+      
       browser = await puppeteerCore.default.launch({
-        args: chromium.default.args,
+        args: [
+          ...chromium.default.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--single-process',
+          '--no-zygote'
+        ],
         defaultViewport: chromium.default.defaultViewport,
         executablePath,
-        headless: chromium.default.headless,
+        headless: true,
       });
       console.log('✅ [Fallback] Browser launched successfully with @sparticuz/chromium');
     } else {
@@ -1262,11 +1273,22 @@ export async function generateUnifiedPDF(
           const executablePath = await chromium.default.executablePath();
           console.log('✅ Chromium executable path obtained');
           
+          // Configure Chromium for serverless
+          await chromium.default.font('https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf');
+          
           browser = await puppeteerCore.default.launch({
-            args: chromium.default.args,
+            args: [
+              ...chromium.default.args,
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+              '--single-process',
+              '--no-zygote'
+            ],
             defaultViewport: chromium.default.defaultViewport,
             executablePath,
-            headless: chromium.default.headless,
+            headless: true,
           });
           console.log('✅ Browser launched successfully with @sparticuz/chromium');
         } catch (error: any) {
