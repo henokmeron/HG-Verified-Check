@@ -18,6 +18,7 @@ const serverFiles = [
   'server/auth/routes.ts',
   'server/auth/middleware.ts',
   'server/pdf/unifiedReportGenerator.ts',
+  'server/pdf/simplePdfGenerator.ts',
   'server/services/EmailService.ts',
   'server/services/OAuthEmailService.ts',
   'server/mockData/generateComprehensiveMockData.ts',
