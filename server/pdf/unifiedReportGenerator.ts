@@ -96,6 +96,7 @@ async function loadSchema(): Promise<VidicheckSchema> {
 }
 
 // Fallback HTML generator when React components aren't available
+// This uses proper Chromium setup for Vercel serverless
 async function generateHTMLFallbackPDF(
   vehicleData: any,
   reportRaw: any,
@@ -111,7 +112,10 @@ async function generateHTMLFallbackPDF(
   const vehicleDetails = reportRaw?.Results?.VehicleDetails || {};
   const vehicleId = vehicleDetails.VehicleIdentification || {};
   const modelDetails = reportRaw?.Results?.ModelDetails || {};
+  const motHistory = reportRaw?.Results?.MotHistoryDetails;
+  const motTests = motHistory?.MotTestDetailsList || [];
   
+  // Build comprehensive HTML with all vehicle data
   const html = `
 <!DOCTYPE html>
 <html>
@@ -119,26 +123,33 @@ async function generateHTMLFallbackPDF(
   <meta charset="UTF-8">
   <style>
     ${css}
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    .header { text-align: center; margin-bottom: 30px; }
-    .logo { max-width: 200px; margin-bottom: 20px; }
-    h1 { color: #0b5fff; margin: 0; }
-    .registration { font-size: 24px; font-weight: bold; margin: 20px 0; }
-    .section { margin: 30px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
-    .section h2 { color: #0b5fff; border-bottom: 2px solid #0b5fff; padding-bottom: 10px; }
-    .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
-    .detail-label { font-weight: bold; color: #666; }
-    .detail-value { color: #333; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+    .header { text-align: center; margin-bottom: 30px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .logo { max-width: 150px; margin-bottom: 15px; }
+    h1 { color: #0b5fff; margin: 10px 0; font-size: 28px; }
+    .registration { font-size: 32px; font-weight: bold; margin: 20px 0; color: #333; background: #ffd700; padding: 10px 20px; display: inline-block; border-radius: 5px; }
+    .section { margin: 20px 0; padding: 25px; background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .section h2 { color: #0b5fff; border-bottom: 3px solid #0b5fff; padding-bottom: 12px; margin-bottom: 20px; font-size: 22px; }
+    .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { font-weight: 600; color: #666; flex: 1; }
+    .detail-value { color: #333; flex: 1; text-align: right; font-weight: 500; }
+    .mot-test { margin: 15px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #0b5fff; border-radius: 5px; }
+    .mot-result-pass { color: #22c55e; font-weight: bold; }
+    .mot-result-fail { color: #ef4444; font-weight: bold; }
+    .advisory { background: #fef3c7; padding: 8px 12px; margin: 5px 0; border-radius: 4px; font-size: 14px; }
+    .failure { background: #fee2e2; padding: 8px 12px; margin: 5px 0; border-radius: 4px; font-size: 14px; }
   </style>
 </head>
 <body>
   <div class="header">
     ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo">` : ''}
     <h1>Vehicle Check Report</h1>
-    <p>HG Verified Vehicle Check</p>
-    <div class="registration">Registration: ${registration}</div>
-    <p>Date of Check: ${new Date(dateOfCheck).toLocaleDateString()}</p>
-    <p>Reference: ${reference}</p>
+    <p style="color: #666; font-size: 16px;">HG Verified Vehicle Check</p>
+    <div class="registration">${registration}</div>
+    <p style="margin-top: 15px;"><strong>Date of Check:</strong> ${new Date(dateOfCheck).toLocaleDateString('en-GB')}</p>
+    <p><strong>Reference:</strong> ${reference}</p>
+    <p><strong>Report Type:</strong> ${isPremium ? 'Comprehensive' : 'Basic'}</p>
   </div>
   
   <div class="section">
@@ -159,54 +170,147 @@ async function generateHTMLFallbackPDF(
       <span class="detail-label">Date First Registered:</span>
       <span class="detail-value">${vehicleId.DateFirstRegisteredInUk || 'N/A'}</span>
     </div>
+    <div class="detail-row">
+      <span class="detail-label">Colour:</span>
+      <span class="detail-value">${vehicleId.Colour || 'N/A'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Fuel Type:</span>
+      <span class="detail-value">${vehicleId.FuelType || 'N/A'}</span>
+    </div>
   </div>
   
   ${modelDetails.Performance ? `
   <div class="section">
-    <h2>Performance</h2>
+    <h2>Performance & Economy</h2>
     ${modelDetails.Performance.FuelEconomy ? `
     <div class="detail-row">
       <span class="detail-label">Combined MPG:</span>
       <span class="detail-value">${modelDetails.Performance.FuelEconomy.CombinedMpg || 'N/A'}</span>
     </div>
+    <div class="detail-row">
+      <span class="detail-label">Urban MPG:</span>
+      <span class="detail-value">${modelDetails.Performance.FuelEconomy.UrbanMpg || 'N/A'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Extra Urban MPG:</span>
+      <span class="detail-value">${modelDetails.Performance.FuelEconomy.ExtraUrbanMpg || 'N/A'}</span>
+    </div>
+    ` : ''}
+    ${modelDetails.Performance.Acceleration ? `
+    <div class="detail-row">
+      <span class="detail-label">0-62 mph:</span>
+      <span class="detail-value">${modelDetails.Performance.Acceleration.ZeroToSixtyTwoMph || 'N/A'}</span>
+    </div>
     ` : ''}
   </div>
   ` : ''}
   
-  ${reportRaw?.Results?.MotHistoryDetails ? `
+  ${motTests.length > 0 ? `
   <div class="section">
     <h2>MOT History</h2>
-    <p>${reportRaw.Results.MotHistoryDetails.MotTestDetailsList?.length || 0} MOT test(s) found</p>
+    <p style="margin-bottom: 20px;"><strong>${motTests.length}</strong> MOT test(s) found</p>
+    ${motTests.slice(0, 5).map((test: any) => `
+      <div class="mot-test">
+        <div class="detail-row">
+          <span class="detail-label">Test Date:</span>
+          <span class="detail-value">${test.TestDate || 'N/A'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Result:</span>
+          <span class="detail-value ${test.TestResult === 'Pass' || test.TestResult === 'PASS' ? 'mot-result-pass' : 'mot-result-fail'}">${test.TestResult || 'N/A'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Mileage:</span>
+          <span class="detail-value">${test.OdometerReading ? test.OdometerReading.toLocaleString() + ' miles' : 'N/A'}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Expiry Date:</span>
+          <span class="detail-value">${test.ExpiryDate || 'N/A'}</span>
+        </div>
+        ${test.AdvisoryNoticeList && test.AdvisoryNoticeList.length > 0 ? `
+          <div style="margin-top: 10px;">
+            <strong style="color: #d97706;">Advisories (${test.AdvisoryNoticeList.length}):</strong>
+            ${test.AdvisoryNoticeList.slice(0, 3).map((adv: any) => `
+              <div class="advisory">${adv.AdvisoryNotice || adv}</div>
+            `).join('')}
+            ${test.AdvisoryNoticeList.length > 3 ? `<p style="font-style: italic; color: #666;">+ ${test.AdvisoryNoticeList.length - 3} more</p>` : ''}
+          </div>
+        ` : ''}
+        ${test.FailureReasonList && test.FailureReasonList.length > 0 ? `
+          <div style="margin-top: 10px;">
+            <strong style="color: #dc2626;">Failures (${test.FailureReasonList.length}):</strong>
+            ${test.FailureReasonList.map((fail: any) => `
+              <div class="failure">${fail.FailureReason || fail}</div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `).join('')}
+    ${motTests.length > 5 ? `<p style="font-style: italic; color: #666; text-align: center; margin-top: 15px;">Showing 5 of ${motTests.length} tests</p>` : ''}
   </div>
-  ` : ''}
+  ` : '<div class="section"><h2>MOT History</h2><p>No MOT history available</p></div>'}
+  
+  <div style="margin-top: 30px; padding: 20px; background: white; border-radius: 10px; text-align: center; color: #666; font-size: 14px;">
+    <p>This report was generated by HG Verified Vehicle Check</p>
+    <p>Report Reference: ${reference}</p>
+    <p>Generated on: ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB')}</p>
+  </div>
 </body>
 </html>
   `;
   
-  // Generate PDF using Puppeteer
-  const isVercel = process.env.VERCEL === '1';
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: isVercel ? [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu'
-    ] : []
-  });
+  // Generate PDF using Puppeteer with proper Chromium setup for Vercel
+  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
   
-  const page = await browser.newPage();
-  await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  
-  const pdfBuffer = await page.pdf({
-    format: 'A4',
-    printBackground: true,
-    margin: { top: '0mm', right: '12mm', bottom: '10mm', left: '12mm' },
-    timeout: 30000
-  });
-  
-  await browser.close();
-  return Buffer.from(pdfBuffer);
+  let browser;
+  try {
+    if (isVercel) {
+      // Use @sparticuz/chromium for Vercel
+      console.log('🚀 [Fallback] Launching Puppeteer on Vercel with @sparticuz/chromium...');
+      const chromium = require('@sparticuz/chromium');
+      const puppeteerCore = require('puppeteer-core');
+      
+      const executablePath = await chromium.executablePath();
+      console.log('✅ [Fallback] Chromium executable path obtained');
+      
+      browser = await puppeteerCore.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath,
+        headless: chromium.headless,
+      });
+      console.log('✅ [Fallback] Browser launched successfully with @sparticuz/chromium');
+    } else {
+      // Local development
+      console.log('🚀 [Fallback] Launching Puppeteer locally...');
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+      });
+      console.log('✅ [Fallback] Browser launched successfully');
+    }
+    
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '10mm', right: '12mm', bottom: '10mm', left: '12mm' },
+      timeout: 30000
+    });
+    
+    await browser.close();
+    console.log('✅ [Fallback] PDF generated successfully');
+    return Buffer.from(pdfBuffer);
+  } catch (error: any) {
+    console.error('❌ [Fallback] PDF generation failed:', error.message);
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+    throw error;
+  }
 }
 
 // Define package documents - matching the actual Free Check schema from portal.vehicledataglobal.com
@@ -360,7 +464,16 @@ export async function generateUnifiedPDF(
     console.log('  - Combined MPG:', fuelData?.CombinedMpg || 'N/A');
     console.log('  - Vehicle Data exists:', !!vehicleData);
     
-    // Load React component before rendering
+    // CRITICAL: In Vercel serverless, ALWAYS use HTML fallback 
+    // React components cannot be loaded in serverless environment
+    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
+    
+    if (isVercel) {
+      console.log('📄 Running in Vercel serverless - using HTML fallback (React components not available)');
+      return await generateHTMLFallbackPDF(vehicleData, cleanedReportRaw, isPremium, checkDate, reportReference, registration, reportCSS, logoUrl);
+    }
+    
+    // Load React component before rendering (local dev only)
     let VehicleReport: any;
     try {
       VehicleReport = await loadReactComponents();
