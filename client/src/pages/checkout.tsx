@@ -400,20 +400,26 @@ export default function Checkout() {
 
   // Show loading while checking authentication
   if (isLoading) {
+    console.log('🔄 Checkout page: isLoading=true, waiting for auth check...');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="bg-white/95 backdrop-blur-lg shadow-2xl border border-white/20 rounded-3xl p-12">
             <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-6" />
             <p className="text-2xl text-gray-700 font-semibold">Loading Payment System...</p>
+            <p className="text-sm text-gray-500 mt-4">Checking authentication...</p>
           </div>
         </div>
       </div>
     );
   }
 
+  // Debug: Log auth state
+  console.log('🔐 Checkout auth state:', { isAuthenticated, isLoading, hasClientSecret: !!clientSecret });
+
   // Show signup prompt if not authenticated
   if (!isAuthenticated) {
+    console.log('❌ Checkout: User not authenticated, showing signup prompt');
     return (
       <div className="min-h-screen py-16">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -454,6 +460,10 @@ export default function Checkout() {
 
               <p className="text-sm text-gray-500 italic">
                 Create an account to purchase and access your report instantly.
+              </p>
+              
+              <p className="text-xs text-red-600 mt-4">
+                Debug: Auth check completed. Please sign in or create an account.
               </p>
 
               <Button 
