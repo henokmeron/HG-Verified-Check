@@ -1244,7 +1244,7 @@ export async function generateUnifiedPDF(
 `;
     
     // Launch puppeteer with Vercel-compatible configuration
-    const isVercel = process.env.VERCEL || process.env.VERCEL_URL;
+    // Note: isVercel is already declared earlier in this function (line 469)
     
     let browser;
     try {
