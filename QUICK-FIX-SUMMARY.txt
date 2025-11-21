@@ -1,0 +1,98 @@
+================================================================================
+                     🔥 AUTOCHECKPRO - COMPLETE FIX 🔥
+================================================================================
+
+📝 3 THINGS YOU MUST DO (15 minutes total):
+
+================================================================================
+1️⃣  FIX DATABASE (2 min) → Neon Console SQL Editor
+================================================================================
+    URL: https://console.neon.tech
+    
+    Run this SQL script (copy from FIX-ALL-DATABASE-ISSUES.sql):
+    
+    ALTER TABLE vehicle_lookups 
+      ADD COLUMN IF NOT EXISTS vehicle_data jsonb,
+      ADD COLUMN IF NOT EXISTS report_raw jsonb,
+      ADD COLUMN IF NOT EXISTS success boolean DEFAULT true,
+      ADD COLUMN IF NOT EXISTS error_message text,
+      ADD COLUMN IF NOT EXISTS report_type varchar DEFAULT 'comprehensive',
+      ADD COLUMN IF NOT EXISTS processing_time integer,
+      ADD COLUMN IF NOT EXISTS api_provider varchar DEFAULT 'vidcheck',
+      ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}';
+    
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'vehicle_lookups' AND column_name = 'credits_used'
+      ) THEN
+        ALTER TABLE vehicle_lookups RENAME COLUMN credits_used TO credits_cost;
+      END IF;
+    END $$;
+    
+    ALTER TABLE vehicle_lookups ADD COLUMN IF NOT EXISTS credits_cost integer DEFAULT 1;
+    UPDATE vehicle_lookups SET success = true WHERE success IS NULL;
+
+================================================================================
+2️⃣  ADD ENVIRONMENT VARIABLES (5 min) → Vercel Dashboard
+================================================================================
+    URL: https://vercel.com/your-project/settings/environment-variables
+    
+    ADD THESE 5 VARIABLES (check all environments):
+    
+    ┌─────────────────────────────────────────────────────────────────┐
+    │ 1. STRIPE_SECRET_KEY          = sk_test_... (from Stripe)      │
+    │ 2. VITE_STRIPE_PUBLIC_KEY     = pk_test_... (from Stripe)      │
+    │ 3. GMAIL_ADDRESS              = yourname@gmail.com             │
+    │ 4. GMAIL_API_KEY              = your-app-password              │
+    │ 5. GMAIL_APP_PASSWORD         = your-app-password (same as #4) │
+    └─────────────────────────────────────────────────────────────────┘
+    
+    Get Stripe keys from: https://dashboard.stripe.com/test/apikeys
+    Get Gmail app password from: https://myaccount.google.com/apppasswords
+
+================================================================================
+3️⃣  REDEPLOY (2 min) → Vercel Dashboard
+================================================================================
+    URL: https://vercel.com/your-project
+    
+    Go to "Deployments" → Click "..." → "Redeploy"
+    
+    WAIT 2-3 MINUTES for deployment to complete!
+
+================================================================================
+                           ✅ WHAT GETS FIXED:
+================================================================================
+    ✅ Admin Dashboard      → Database columns added
+    ✅ Lookups Page         → Database columns added
+    ✅ Analytics Page       → Database columns added
+    ✅ Payment Form         → Stripe keys added
+    ✅ PDF Download         → Code fixed + Chromium setup
+    ✅ Email Sending        → Gmail credentials added
+
+================================================================================
+                         🎯 AFTER COMPLETING ALL 3 STEPS:
+================================================================================
+    1. Go to: https://hg-verified-check.vercel.app/admin
+    2. Test Dashboard, Lookups, Analytics → Should all load ✅
+    3. Test Payment → Should show form and work ✅
+    4. Test PDF Download → Should download PDF ✅
+    5. Test Email → Should send automatically ✅
+
+================================================================================
+                              ⚠️  CRITICAL:
+================================================================================
+    ⚠️  YOU MUST DO ALL 3 STEPS IN ORDER
+    ⚠️  DON'T SKIP THE REDEPLOY
+    ⚠️  WAIT FOR DEPLOYMENT TO FINISH
+    ⚠️  USE EXACT VARIABLE NAMES (case-sensitive)
+
+================================================================================
+
+📖 Full guide: COMPLETE-FIX-GUIDE.md
+🔧 SQL script: FIX-ALL-DATABASE-ISSUES.sql
+⚙️  Env vars guide: VERCEL-ENV-VARIABLES-SETUP.md
+
+================================================================================
+
