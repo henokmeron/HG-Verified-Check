@@ -259,6 +259,40 @@ BEGIN
   END IF;
 END \$\$;
 
+-- Add missing columns to vehicle_lookups table if they don't exist
+DO \$\$
+BEGIN
+  -- Add success column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'vehicle_lookups' AND column_name = 'success') THEN
+    ALTER TABLE "vehicle_lookups" ADD COLUMN "success" boolean DEFAULT true NOT NULL;
+  END IF;
+  
+  -- Add error_message column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'vehicle_lookups' AND column_name = 'error_message') THEN
+    ALTER TABLE "vehicle_lookups" ADD COLUMN "error_message" text;
+  END IF;
+  
+  -- Add report_type column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'vehicle_lookups' AND column_name = 'report_type') THEN
+    ALTER TABLE "vehicle_lookups" ADD COLUMN "report_type" varchar DEFAULT 'comprehensive' NOT NULL;
+  END IF;
+  
+  -- Add processing_time column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'vehicle_lookups' AND column_name = 'processing_time') THEN
+    ALTER TABLE "vehicle_lookups" ADD COLUMN "processing_time" integer;
+  END IF;
+  
+  -- Add api_provider column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'vehicle_lookups' AND column_name = 'api_provider') THEN
+    ALTER TABLE "vehicle_lookups" ADD COLUMN "api_provider" varchar DEFAULT 'vidcheck' NOT NULL;
+  END IF;
+  
+  -- Add metadata column if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'vehicle_lookups' AND column_name = 'metadata') THEN
+    ALTER TABLE "vehicle_lookups" ADD COLUMN "metadata" jsonb DEFAULT '{}';
+  END IF;
+END \$\$;
+
 DO \$\$
 BEGIN
   IF NOT EXISTS (

@@ -68,6 +68,9 @@ async function loadReactComponents() {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Helper function to check if running in Vercel environment
+const isRunningInVercel = () => process.env.VERCEL === '1' || !!process.env.VERCEL_URL;
+
 // Load the schema
 async function loadSchema(): Promise<VidicheckSchema> {
   // Try multiple paths - Vercel might have different working directory
@@ -261,24 +264,24 @@ async function generateHTMLFallbackPDF(
   `;
   
   // Generate PDF using Puppeteer with proper Chromium setup for Vercel
-  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
+  const isVercel = isRunningInVercel();
   
   let browser;
   try {
     if (isVercel) {
       // Use @sparticuz/chromium for Vercel
       console.log('🚀 [Fallback] Launching Puppeteer on Vercel with @sparticuz/chromium...');
-      const chromium = require('@sparticuz/chromium');
-      const puppeteerCore = require('puppeteer-core');
+      const chromium = await import('@sparticuz/chromium');
+      const puppeteerCore = await import('puppeteer-core');
       
-      const executablePath = await chromium.executablePath();
+      const executablePath = await chromium.default.executablePath();
       console.log('✅ [Fallback] Chromium executable path obtained');
       
-      browser = await puppeteerCore.launch({
-        args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
+      browser = await puppeteerCore.default.launch({
+        args: chromium.default.args,
+        defaultViewport: chromium.default.defaultViewport,
         executablePath,
-        headless: chromium.headless,
+        headless: chromium.default.headless,
       });
       console.log('✅ [Fallback] Browser launched successfully with @sparticuz/chromium');
     } else {
@@ -466,7 +469,7 @@ export async function generateUnifiedPDF(
     
     // CRITICAL: In Vercel serverless, ALWAYS use HTML fallback 
     // React components cannot be loaded in serverless environment
-    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
+    const isVercel = isRunningInVercel();
     
     if (isVercel) {
       console.log('📄 Running in Vercel serverless - using HTML fallback (React components not available)');
@@ -1252,18 +1255,18 @@ export async function generateUnifiedPDF(
         // For Vercel serverless, use @sparticuz/chromium with puppeteer-core
         console.log('🚀 Launching Puppeteer on Vercel with @sparticuz/chromium...');
         try {
-          const chromium = require('@sparticuz/chromium');
-          const puppeteerCore = require('puppeteer-core');
+          const chromium = await import('@sparticuz/chromium');
+          const puppeteerCore = await import('puppeteer-core');
           
           // Set executable path for Vercel
-          const executablePath = await chromium.executablePath();
+          const executablePath = await chromium.default.executablePath();
           console.log('✅ Chromium executable path obtained');
           
-          browser = await puppeteerCore.launch({
-            args: chromium.args,
-            defaultViewport: chromium.defaultViewport,
+          browser = await puppeteerCore.default.launch({
+            args: chromium.default.args,
+            defaultViewport: chromium.default.defaultViewport,
             executablePath,
-            headless: chromium.headless,
+            headless: chromium.default.headless,
           });
           console.log('✅ Browser launched successfully with @sparticuz/chromium');
         } catch (error: any) {

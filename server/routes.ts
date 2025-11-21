@@ -3262,6 +3262,19 @@ For support, contact: support@hgverifiedvehiclecheck.com
       let isAuthenticated = false;
       let userId: string | undefined;
       
+      console.log('🔐 Payment intent auth check:', {
+        hasReqUser: !!req.user,
+        reqUserId: req.user?.id,
+        reqUserEmail: req.user?.email,
+        hasSession: !!req.session,
+        sessionUserId: req.session?.userId,
+        sessionUserLoggedIn: req.session?.userLoggedIn,
+        isPassportAuth: !!(req as any).isAuthenticated && (req as any).isAuthenticated(),
+        passport: req.session?.passport,
+        env: process.env.NODE_ENV,
+        isVercel: !!process.env.VERCEL
+      });
+      
       if (process.env.REPL_ID) {
         // Replit auth
         isAuthenticated = !!(req.user && req.user.claims && req.user.claims.sub);
@@ -3270,11 +3283,16 @@ For support, contact: support@hgverifiedvehiclecheck.com
         // Passport auth (production) or local dev
         const isPassportAuth = (req as any).isAuthenticated && (req as any).isAuthenticated();
         const isLocalDevAuth = !process.env.VERCEL && (req.session as any)?.userLoggedIn;
-        isAuthenticated = isPassportAuth || isLocalDevAuth;
+        const hasSessionUserId = !!(req.session as any)?.userId;
+        
+        // On Vercel, also check if session has userId (fallback)
+        const hasVercelSession = process.env.VERCEL && hasSessionUserId;
+        
+        isAuthenticated = isPassportAuth || isLocalDevAuth || hasVercelSession;
         
         if (isPassportAuth) {
           userId = req.user?.id; // Passport stores user.id
-        } else if (isLocalDevAuth) {
+        } else if (isLocalDevAuth || hasVercelSession) {
           userId = req.session?.userId;
         }
       }
@@ -3285,9 +3303,10 @@ For support, contact: support@hgverifiedvehiclecheck.com
           hasUser: !!req.user,
           isPassportAuth: (req as any).isAuthenticated && (req as any).isAuthenticated(),
           userId: userId,
-          userEmail: req.user?.email
+          userEmail: req.user?.email,
+          sessionData: req.session
         });
-        return res.status(401).json({ message: "Authentication required" });
+        return res.status(401).json({ message: "Authentication required. Please log in and try again." });
       }
       
       const { amount, credits, description } = req.body;
