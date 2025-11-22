@@ -17,7 +17,6 @@ const serverFiles = [
   'server/auth/passport.ts',
   'server/auth/routes.ts',
   'server/auth/middleware.ts',
-  'server/pdf/unifiedReportGenerator.ts',
   'server/pdf/simplePdfGenerator.ts',
   'server/services/EmailService.ts',
   'server/services/OAuthEmailService.ts',
