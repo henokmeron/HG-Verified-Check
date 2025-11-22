@@ -1,5 +1,3 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import type { UnifiedReportData } from './unifiedReportData';
 
 /**
@@ -8,6 +6,10 @@ import type { UnifiedReportData } from './unifiedReportData';
  */
 export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buffer> {
   console.log('📄 Generating PDF with jsPDF (serverless-compatible)');
+
+  // Dynamic imports to avoid ESM issues in serverless
+  const { jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
 
   const { context, vehicleData = {}, reportRaw = {} } = unified;
   const { registration, dateOfCheck, reference, isPremium } = context;
@@ -224,9 +226,9 @@ export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buf
   doc.text(`Generated on: ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB')}`, 105, yPos + 18, { align: 'center' });
   
   // Convert to buffer
-  const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+  const pdfBuffer = doc.output('arraybuffer') as ArrayBuffer;
   console.log('✅ PDF generated successfully with jsPDF, size:', pdfBuffer.length, 'bytes');
   
-  return pdfBuffer;
+  return Buffer.from(pdfBuffer);
 }
 
