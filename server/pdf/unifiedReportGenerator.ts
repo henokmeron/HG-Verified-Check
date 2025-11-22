@@ -6,7 +6,23 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 // Use puppeteer-core with @sparticuz/chromium for Vercel serverless
 // Fallback to regular puppeteer for local development
-import puppeteer from 'puppeteer';
+type PuppeteerModule = typeof import('puppeteer');
+let cachedPuppeteer: PuppeteerModule | null = null;
+
+async function loadPuppeteer(): Promise<PuppeteerModule> {
+  if (cachedPuppeteer) return cachedPuppeteer;
+
+  try {
+    const mod = await import('puppeteer');
+    cachedPuppeteer = (mod as any).default ?? mod;
+  } catch (err) {
+    console.warn('⚠️ puppeteer not available, falling back to puppeteer-core:', (err as Error).message);
+    const coreMod = await import('puppeteer-core');
+    cachedPuppeteer = (coreMod as any).default ?? coreMod;
+  }
+
+  return cachedPuppeteer;
+}
 
 // Dynamic imports for React components - handle cases where they're not available
 let VehicleReportComponent: any = null;
@@ -298,6 +314,7 @@ async function generateHTMLFallbackPDF(
     } else {
       // Local development
       console.log('🚀 [Fallback] Launching Puppeteer locally...');
+      const puppeteer = await loadPuppeteer();
       browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
@@ -1299,6 +1316,7 @@ export async function generateUnifiedPDF(
       } else {
         // Local development - use regular puppeteer
         console.log('🚀 Launching Puppeteer locally...');
+        const puppeteer = await loadPuppeteer();
         browser = await puppeteer.launch({
           headless: true,
           args: [
