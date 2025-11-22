@@ -1,20 +1,20 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import type { UnifiedReportData } from './unifiedReportData';
 
 /**
  * Simple PDF generator that works on Vercel serverless
  * Uses jsPDF instead of Puppeteer/Chromium
  */
-export async function generateSimplePDF(
-  vehicleData: any,
-  reportRaw: any,
-  isPremium: boolean,
-  dateOfCheck: Date | string,
-  reference: string,
-  registration: string
-): Promise<Buffer> {
+export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buffer> {
   console.log('📄 Generating PDF with jsPDF (serverless-compatible)');
-  
+
+  const { context, vehicleData = {}, reportRaw = {} } = unified;
+  const { registration, dateOfCheck, reference, isPremium } = context;
+  const resolvedReference = reference || registration;
+  const resolvedDate = new Date(dateOfCheck);
+  const checkDate = Number.isNaN(resolvedDate.getTime()) ? new Date() : resolvedDate;
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -55,9 +55,9 @@ export async function generateSimplePDF(
   doc.setTextColor(...textColor);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Date of Check: ${new Date(dateOfCheck).toLocaleDateString('en-GB')}`, 20, yPos);
+  doc.text(`Date of Check: ${checkDate.toLocaleDateString('en-GB')}`, 20, yPos);
   yPos += 5;
-  doc.text(`Reference: ${reference}`, 20, yPos);
+  doc.text(`Reference: ${resolvedReference}`, 20, yPos);
   yPos += 5;
   doc.text(`Report Type: ${isPremium ? 'Comprehensive' : 'Basic'}`, 20, yPos);
   yPos += 10;
