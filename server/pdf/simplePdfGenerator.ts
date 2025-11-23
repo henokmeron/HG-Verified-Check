@@ -41,10 +41,168 @@ async function loadJsPDFConstructor(): Promise<JsPDFConstructor> {
   return ctor;
 }
 
-const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}T?/;
+const DASH = '—';
+
+const toNumber = (value: any): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const cleaned = String(value).replace(/,/g, '').replace(/[^\d.-]/g, '');
+  if (!cleaned) return null;
+  const numeric = Number(cleaned);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const formatNumber = (value: any, options: { decimals?: number; group?: boolean } = {}): string => {
+  const num = toNumber(value);
+  if (num === null) return DASH;
+  const decimals = options.decimals ?? 0;
+  const useGrouping = options.group !== false;
+  return num.toLocaleString('en-GB', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+    useGrouping
+  });
+};
+
+const formatCurrency = (value: any): string => {
+  const num = toNumber(value);
+  if (num === null) return DASH;
+  return `£${num.toFixed(2)}`;
+};
+
+const formatUnit = (value: any, unit: string, options?: { decimals?: number; group?: boolean }): string => {
+  if (typeof value === 'string' && value.trim() && !toNumber(value)) {
+    return value.trim();
+  }
+  const base = formatNumber(value, options);
+  if (base === DASH) return DASH;
+  return `${base} ${unit}`.trim();
+};
+
+const boolToText = (value: any): string => {
+  if (value === null || value === undefined) return DASH;
+  return value ? 'Yes' : 'No';
+};
+
+const formatDate = (value: any, options: { includeTime?: boolean } = {}): string => {
+  if (!value) return DASH;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === 'string' ? value : DASH;
+  }
+  if (options.includeTime) {
+    return date
+      .toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+      .replace(',', '');
+  }
+  return date.toLocaleDateString('en-GB');
+};
+
+const textOrDash = (value: any): string => {
+  if (value === null || value === undefined) return DASH;
+  const str = String(value).trim();
+  return str || DASH;
+};
+
+const formatMileage = (value: any): string => {
+  const num = toNumber(value);
+  if (num === null) return DASH;
+  return `${num.toLocaleString('en-GB')} miles`;
+};
+
+const formatPercentage = (value: any): string => {
+  const num = toNumber(value);
+  if (num === null) return DASH;
+  return `${num.toFixed(0)}%`;
+};
+
+const LABEL_OVERRIDES: Record<string, string> = {
+  Vrm: 'VRM',
+  Vin: 'VIN',
+  VinLast5: 'VIN Last 5',
+  DvlaMake: 'DVLA Make',
+  DvlaModel: 'DVLA Model',
+  DvlaWheelPlan: 'DVLA Wheel Plan',
+  DateFirstRegisteredInUk: 'Date First Registered in UK',
+  DateFirstRegistered: 'Date First Registered',
+  DateOfManufacture: 'Date Of Manufacture',
+  YearOfManufacture: 'Year Of Manufacture',
+  PreviousVrmNi: 'Previous VRM NI',
+  DvlaBodyType: 'DVLA Body Type',
+  DvlaFuelType: 'DVLA Fuel Type',
+  IsImportedFromNi: 'Is Imported From NI',
+  IsImportedFromOutsideEu: 'Is Imported From Non EU',
+  DvlaCo2: 'DVLA CO2',
+  DvlaCo2Band: 'DVLA CO2 Band',
+  DvlaBand: 'DVLA Band',
+  SixMonths: 'Six Months',
+  TwelveMonths: 'Twelve Months',
+  KeeperStartDate: 'Keeper Start Date',
+  PreviousKeeperDisposalDate: 'Previous Keeper Disposal Date',
+  IssueDate: 'Issue Date',
+  Co2Emissions: 'CO₂ Emissions',
+  CombinedMpg: 'Combined MPG',
+  UrbanMpg: 'Urban MPG',
+  ExtraUrbanMpg: 'Extra Urban MPG',
+  CombinedLPer100Km: 'Combined L/100km',
+  UrbanLPer100Km: 'Urban L/100km',
+  ExtraUrbanLPer100Km: 'Extra Urban L/100km'
+};
+
+const HIDDEN_FIELD_KEYS = new Set([
+  'StatusCode',
+  'StatusMessage',
+  'DocumentVersion',
+  'GeneratedAt',
+  'UpdateTimeStamp',
+  'PackageName',
+  'ResponseId',
+  'RequestInformation',
+  'ResponseInformation',
+  'UkvdId',
+  'SubscriptionOptionList',
+  'Software',
+  'AdditionalInformation',
+  'DocumentVersionDescription'
+]);
+
+const UNIT_OVERRIDES: Record<string, string> = {
+  DvlaCo2: 'g/km',
+  Co2Emissions: 'g/km',
+  EngineCapacity: 'cc',
+  EngineCapacityCc: 'cc',
+  EngineCapacityLitres: 'litres',
+  MassInService: 'kg',
+  KerbWeight: 'kg',
+  GrossVehicleWeight: 'kg',
+  GrossCombinedWeight: 'kg',
+  MaxPermissibleBrakedTrailerMass: 'kg',
+  MaxPermissibleUnbrakedTrailerMass: 'kg',
+  FuelTankCapacityLitres: 'litres',
+  Height: 'mm',
+  Width: 'mm',
+  Length: 'mm',
+  WheelbaseLength: 'mm',
+  MaxSpeedKph: 'kph',
+  MaxSpeedMph: 'mph',
+  ZeroToSixtyMph: 's',
+  TorqueNm: 'Nm',
+  TorqueLbFt: 'lb ft',
+  PowerPs: 'PS',
+  PowerKw: 'kW',
+  PowerBhp: 'bhp'
+};
 
 const formatLabel = (raw: string): string => {
   if (!raw) return '';
+  if (LABEL_OVERRIDES[raw]) return LABEL_OVERRIDES[raw];
   return raw
     .replace(/_/g, ' ')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -53,54 +211,132 @@ const formatLabel = (raw: string): string => {
     .replace(/^./, (ch) => ch.toUpperCase());
 };
 
-const formatDateString = (value: string): string => {
-  if (!value) return 'N/A';
-  try {
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return value;
-    }
-    return parsed.toLocaleDateString('en-GB');
-  } catch {
-    return value;
-  }
-};
-
 const formatArrayValue = (arr: any[]): string => {
-  if (!arr || arr.length === 0) return 'None';
+  if (!arr || arr.length === 0) return DASH;
   const flattened = arr.filter((item) => item !== null && item !== undefined);
-  if (flattened.length === 0) return 'None';
-  if (flattened.every((item) => ['string', 'number', 'boolean'].includes(typeof item))) {
-    return flattened.map((item) => formatValue(item)).join(', ');
-  }
-  return `${flattened.length} item(s)`;
+  if (!flattened.length) return DASH;
+  return flattened.map((item) => textOrDash(item)).join(', ');
 };
 
-function formatValue(value: any): string {
-  if (value === null || value === undefined) return 'N/A';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'number') return value.toLocaleString();
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return 'N/A';
-    if (ISO_DATE_REGEX.test(trimmed)) {
-      return formatDateString(trimmed);
+const formatGenericValue = (key: string, value: any): string => {
+  if (value === null || value === undefined) return DASH;
+  if (Array.isArray(value)) return formatArrayValue(value);
+  if (typeof value === 'boolean') return boolToText(value);
+  if (value instanceof Date) return formatDate(value);
+  if (typeof value === 'number') {
+    if (UNIT_OVERRIDES[key]) {
+      return formatUnit(value, UNIT_OVERRIDES[key]);
     }
-    return trimmed;
-  }
-  if (Array.isArray(value)) {
-    return formatArrayValue(value);
-  }
-  if (value instanceof Date) {
-    return value.toLocaleDateString('en-GB');
+    return value.toLocaleString('en-GB');
   }
   if (typeof value === 'object') {
     const keys = Object.keys(value);
-    if (keys.length === 0) return 'N/A';
+    if (!keys.length) return DASH;
     return `${keys.length} field(s)`;
   }
-  return String(value);
+  if (UNIT_OVERRIDES[key]) {
+    return formatUnit(value, UNIT_OVERRIDES[key]);
+  }
+  return textOrDash(value);
+};
+
+interface NormalizedMotTest {
+  index: number;
+  date: Date | null;
+  dateLabel: string;
+  expiryDate: string;
+  mileage: number | null;
+  mileageLabel: string;
+  testNumber: string;
+  location: string;
+  resultLabel: string;
+  passed: boolean;
+  isRetest: boolean;
+  advisories: string[];
+  failures: string[];
 }
+
+const extractMotTests = (motData: any): any[] => {
+  if (!motData) return [];
+  if (Array.isArray(motData)) return motData;
+  if (Array.isArray(motData.MotTestDetailsList)) return motData.MotTestDetailsList;
+  if (Array.isArray(motData.MotTests)) return motData.MotTests;
+  if (Array.isArray(motData.Tests)) return motData.Tests;
+  if (Array.isArray(motData.TestHistory)) return motData.TestHistory;
+  return [];
+};
+
+const categorizeAnnotations = (items: any[] = []): { advisories: string[]; failures: string[] } => {
+  const advisories: string[] = [];
+  const failures: string[] = [];
+
+  items.forEach((item) => {
+    if (!item) return;
+    const type = (item.Type || item.Severity || '').toString().toUpperCase();
+    const text = item.Text || item.AdvisoryNotice || item.FailureReason || item.Description;
+    if (!text) return;
+    if (type.includes('FAIL') || type.includes('PRS') || type.includes('DANGEROUS')) {
+      failures.push(text);
+    } else {
+      advisories.push(text);
+    }
+  });
+
+  return { advisories, failures };
+};
+
+const normalizeMotTests = (motData: any): NormalizedMotTest[] => {
+  const rawTests = extractMotTests(motData);
+  return rawTests
+    .map((test, index) => {
+      const dateValue = test.TestDate || test.Date || test.CompletedDate || test.MotTestDate;
+      const date = dateValue ? new Date(dateValue) : null;
+      const passed =
+        typeof test.TestPassed === 'boolean'
+          ? test.TestPassed
+          : (test.TestResult || '').toString().toLowerCase().includes('pass');
+      const isRetest = Boolean(test.IsRetest);
+      const resultLabel = passed ? 'PASS' : 'FAIL';
+      const mileage = toNumber(test.OdometerReading ?? test.Mileage ?? test.Odometer ?? test.OdometerValue);
+      const mileageLabel = mileage !== null ? `${mileage.toLocaleString('en-GB')} miles` : DASH;
+      const expiryDate = formatDate(test.ExpiryDate);
+      const testNumber = textOrDash(test.TestNumber || test.CertificateNumber);
+      const location = textOrDash(test.TestLocation || test.StationName || test.TestStationName);
+      const annotationBuckets = categorizeAnnotations(
+        (test.AnnotationList as any[]) || (test.AdvisoryNoticeList as any[]) || (test.Failures as any[])
+      );
+      const extraAdvisories = Array.isArray(test.AdvisoryNoticeList)
+        ? test.AdvisoryNoticeList.map((item) => item.AdvisoryNotice || item.Text).filter(Boolean)
+        : [];
+      const extraFailures = Array.isArray(test.FailureReasonList)
+        ? test.FailureReasonList.map((item) => item.FailureReason || item.Text).filter(Boolean)
+        : [];
+
+      const advisories = [...annotationBuckets.advisories, ...extraAdvisories];
+      const failures = [...annotationBuckets.failures, ...extraFailures];
+
+      return {
+        index,
+        date,
+        dateLabel: date ? formatDate(date) : DASH,
+        expiryDate,
+        mileage,
+        mileageLabel,
+        testNumber,
+        location,
+        resultLabel: isRetest ? `${resultLabel} (Retest)` : resultLabel,
+        passed,
+        isRetest,
+        advisories,
+        failures
+      };
+    })
+    .sort((a, b) => {
+      const aTime = a.date ? a.date.getTime() : 0;
+      const bTime = b.date ? b.date.getTime() : 0;
+      return bTime - aTime;
+    });
+};
 
 const ensurePageSpace = (doc: any, yPos: number, required = 0): number => {
   if (yPos + required > PAGE_BOTTOM) {
@@ -219,9 +455,10 @@ const renderObjectContent = (
 
   for (const [key, value] of Object.entries(data)) {
     if (value === null || value === undefined) continue;
+    if (HIDDEN_FIELD_KEYS.has(key)) continue;
 
     if (Array.isArray(value)) {
-      directEntries.push({ label: formatLabel(key), value: formatArrayValue(value) });
+      directEntries.push({ label: `${formatLabel(key)}:`, value: formatArrayValue(value) });
       continue;
     }
 
@@ -231,7 +468,7 @@ const renderObjectContent = (
       continue;
     }
 
-    directEntries.push({ label: formatLabel(key), value: formatValue(value) });
+    directEntries.push({ label: `${formatLabel(key)}:`, value: formatGenericValue(key, value) });
   }
 
   if (directEntries.length) {
@@ -250,48 +487,175 @@ const renderObjectContent = (
 const renderVehicleDetails = (
   doc: any,
   data: any,
+  registration: string,
   yPos: number,
   primaryColor: [number, number, number]
 ): number => {
   if (!data || typeof data !== 'object') return yPos;
+  const entry = (label: string, value: string) => ({ label: `${label}:`, value: value ?? DASH });
+
   yPos = addSectionTitle(doc, 'Vehicle Details', yPos, primaryColor);
 
-  const sections = [
-    { key: 'VehicleIdentification', label: 'Vehicle Identification' },
-    { key: 'VehicleStatus', label: 'Vehicle Status' },
-    { key: 'VehicleHistory', label: 'Vehicle History' },
-    { key: 'DvlaTechnicalDetails', label: 'DVLA Technical Details' }
-  ];
+  const vehicleId = data?.VehicleIdentification || {};
+  const identificationEntries: GridEntry[] = [
+    entry('VRM', textOrDash(vehicleId.Vrm || registration)),
+    entry('VIN', textOrDash(vehicleId.Vin)),
+    entry('VIN Last 5', textOrDash(vehicleId.VinLast5)),
+    entry('DVLA Make', textOrDash(vehicleId.DvlaMake)),
+    entry('DVLA Model', textOrDash(vehicleId.DvlaModel)),
+    entry('DVLA Wheel Plan', textOrDash(vehicleId.DvlaWheelPlan)),
+    entry('Date First Registered in UK', formatDate(vehicleId.DateFirstRegisteredInUk)),
+    entry('Date First Registered', formatDate(vehicleId.DateFirstRegistered)),
+    entry('Date Of Manufacture', formatDate(vehicleId.DateOfManufacture)),
+    entry('Year Of Manufacture', formatNumber(vehicleId.YearOfManufacture, { group: false })),
+    entry('Vehicle Used Before First Registration', boolToText(vehicleId.VehicleUsedBeforeFirstRegistration)),
+    entry('Engine Number', textOrDash(vehicleId.EngineNumber)),
+    entry('Previous VRM NI', textOrDash(vehicleId.PreviousVrmNi)),
+    entry('DVLA Body Type', textOrDash(vehicleId.DvlaBodyType)),
+    entry('DVLA Fuel Type', textOrDash(vehicleId.DvlaFuelType))
+  ].filter((pair) => pair.value !== DASH);
 
-  const consumed = new Set<string>();
+  if (identificationEntries.length) {
+    yPos = addSubSectionTitle(doc, 'Vehicle Identification', yPos, primaryColor);
+    yPos = renderKeyValueGrid(doc, identificationEntries, yPos);
+  }
 
-  sections.forEach((section) => {
-    const content = data?.[section.key];
-    if (content && typeof content === 'object' && Object.keys(content).length > 0) {
-      consumed.add(section.key);
-      yPos = addSubSectionTitle(doc, section.label, yPos, primaryColor);
-      yPos = renderObjectContent(doc, content, yPos, primaryColor, 1);
-    }
-  });
+  const vehicleStatus = data?.VehicleStatus || {};
+  const statusEntries: GridEntry[] = [
+    entry('Is Imported', boolToText(vehicleStatus.IsImported)),
+    entry('Is Imported From NI', boolToText(vehicleStatus.IsImportedFromNi)),
+    entry('Is Imported From Non EU', boolToText(vehicleStatus.IsImportedFromOutsideEu)),
+    entry('Date Imported', formatDate(vehicleStatus.DateImported)),
+    entry('Certificate Of Destruction Issued', boolToText(vehicleStatus.CertificateOfDestructionIssued)),
+    entry('Is Exported', boolToText(vehicleStatus.IsExported)),
+    entry('Date Exported', formatDate(vehicleStatus.DateExported)),
+    entry('Is Scrapped', boolToText(vehicleStatus.IsScrapped)),
+    entry('Is Unscrapped', boolToText(vehicleStatus.IsUnscrapped)),
+    entry('Date Scrapped', formatDate(vehicleStatus.DateScrapped)),
+    entry('DVLA Cherished Transfer Marker', boolToText(vehicleStatus.DvlaCherishedTransferMarker))
+  ].filter((pair) => pair.value !== DASH);
 
-  const remaining = Object.entries(data)
-    .filter(([key]) => !consumed.has(key));
+  if (statusEntries.length) {
+    yPos = addSubSectionTitle(doc, 'Vehicle Status', yPos, primaryColor);
+    yPos = renderKeyValueGrid(doc, statusEntries, yPos);
+  }
 
-  if (remaining.length) {
-    yPos = addSubSectionTitle(doc, 'Additional Details', yPos, primaryColor);
-    const directEntries = remaining
-      .filter(([, value]) => typeof value !== 'object' || Array.isArray(value))
-      .map(([key, value]) => ({ label: formatLabel(key), value: formatValue(value) }));
-    if (directEntries.length) {
-      yPos = renderKeyValueGrid(doc, directEntries, yPos, { startX: 25 });
-    }
+  const history = data?.VehicleHistory || {};
+  const colorDetails = history?.ColourDetails || {};
+  const colorEntries: GridEntry[] = [
+    entry('Current Colour', textOrDash(colorDetails.CurrentColour)),
+    entry('Number Of Colour Changes', formatNumber(colorDetails.NumberOfColourChanges)),
+    entry('Original Colour', textOrDash(colorDetails.OriginalColour))
+  ].filter((pair) => pair.value !== DASH);
 
-    remaining.forEach(([key, value]) => {
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
-        yPos = addSubSectionTitle(doc, formatLabel(key), yPos, primaryColor);
-        yPos = renderObjectContent(doc, value, yPos, primaryColor, 1);
-      }
+  const keeperList = Array.isArray(history?.KeeperChangeList) ? history.KeeperChangeList : [];
+  const plateList = Array.isArray(history?.PlateChangeList) ? history.PlateChangeList : [];
+  const v5cList = Array.isArray(history?.V5cCertificateList) ? history.V5cCertificateList : [];
+
+  if (colorEntries.length || keeperList.length || plateList.length || v5cList.length) {
+    yPos = addSubSectionTitle(doc, 'Vehicle History', yPos, primaryColor);
+  }
+
+  if (colorEntries.length) {
+    yPos = renderKeyValueGrid(doc, colorEntries, yPos);
+  }
+
+  const renderTimeline = (title: string, items: any[], formatter: (item: any, index: number) => string[]): number => {
+    if (!items.length) return yPos;
+    yPos = ensurePageSpace(doc, yPos, items.length * 10 + 10);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...primaryColor);
+    doc.text(title, 25, yPos);
+    yPos += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    items.forEach((item, idx) => {
+      const lines = formatter(item, idx);
+      lines.forEach((line, lineIdx) => {
+        doc.text(line, 30, yPos + lineIdx * 4);
+      });
+      yPos += lines.length * 4 + 2;
     });
+    return yPos + 2;
+  };
+
+  if (keeperList.length) {
+    yPos = renderTimeline('Keeper Change History', keeperList, (item, index) => {
+      return [
+        `Keeper ${index + 1}: ${textOrDash(item.NumberOfPreviousKeepers)}`,
+        `Start Date: ${formatDate(item.KeeperStartDate)}`,
+        `Previous Disposal Date: ${formatDate(item.PreviousKeeperDisposalDate)}`
+      ];
+    });
+  }
+
+  if (plateList.length) {
+    yPos = renderTimeline('Plate Change History', plateList, (item) => {
+      return [
+        `Previous Plate: ${textOrDash(item.PreviousPlate)}`,
+        `Date: ${formatDate(item.PlateChangeDate)}`
+      ];
+    });
+  }
+
+  if (v5cList.length) {
+    yPos = renderTimeline('V5C Certificate Issue Dates', v5cList, (item) => {
+      return [`Issue Date: ${formatDate(item.IssueDate)}`];
+    });
+  }
+
+  const tech = data?.DvlaTechnicalDetails || {};
+  const techEntries: GridEntry[] = [
+    entry('Number Of Seats', formatNumber(tech.NumberOfSeats)),
+    entry('Engine Capacity', formatUnit(tech.EngineCapacityCc || tech.EngineCapacity, 'cc')),
+    entry('Max Net Power', formatUnit(tech.MaxNetPowerKw || tech.MaxNetPower, 'kW')),
+    entry('Mass In Service', formatUnit(tech.MassInServiceKg || tech.MassInService, 'kg')),
+    entry('Power To Weight Ratio', formatUnit(tech.PowerToWeightRatio, 'kg')),
+    entry('Max Permissible Braked Trailer Mass', formatUnit(tech.MaxPermissibleBrakedTrailerMassKg, 'kg')),
+    entry('Max Permissible Unbraked Trailer Mass', formatUnit(tech.MaxPermissibleUnbrakedTrailerMassKg, 'kg'))
+  ].filter((pair) => pair.value !== DASH);
+
+  if (techEntries.length) {
+    yPos = addSubSectionTitle(doc, 'DVLA Technical Details', yPos, primaryColor);
+    yPos = renderKeyValueGrid(doc, techEntries, yPos);
+  }
+
+  const vehicleTaxDetails = data?.VehicleTaxDetails || {};
+  const taxEntries: GridEntry[] = [
+    entry('VRM', textOrDash(vehicleTaxDetails.Vrm)),
+    entry('Make', textOrDash(vehicleTaxDetails.Make)),
+    entry('CO₂ Emissions', formatUnit(vehicleTaxDetails.Co2Emissions, 'g/km')),
+    entry('MOT Status', textOrDash(vehicleTaxDetails.MotStatus)),
+    entry('Year Of Manufacture', formatNumber(vehicleTaxDetails.YearOfManufacture, { group: false })),
+    entry('Tax Due Date', formatDate(vehicleTaxDetails.TaxDueDate)),
+    entry('Tax Status', textOrDash(vehicleTaxDetails.TaxStatus)),
+    entry('Tax Is Currently Valid', boolToText(vehicleTaxDetails.TaxIsCurrentlyValid)),
+    entry('Tax Days Remaining', formatNumber(vehicleTaxDetails.TaxDaysRemaining))
+  ].filter((pair) => pair.value !== DASH);
+
+  if (taxEntries.length) {
+    yPos = addSectionTitle(doc, 'Vehicle Tax Details', yPos, primaryColor);
+    yPos = renderKeyValueGrid(doc, taxEntries, yPos);
+  }
+
+  const vedDetails = vehicleStatus?.VehicleExciseDutyDetails || {};
+  const vedEntries: GridEntry[] = [
+    entry('DVLA CO2', formatUnit(vedDetails.DvlaCo2, 'g/km')),
+    entry('DVLA CO2 Band', textOrDash(vedDetails.DvlaCo2Band)),
+    entry('DVLA Band', textOrDash(vedDetails.DvlaBand)),
+    entry('Standard Six Months', vedDetails?.VedRate?.Standard?.SixMonths !== undefined ? formatCurrency(vedDetails.VedRate.Standard.SixMonths) : DASH),
+    entry('Standard Twelve Months', vedDetails?.VedRate?.Standard?.TwelveMonths !== undefined ? formatCurrency(vedDetails.VedRate.Standard.TwelveMonths) : DASH),
+    entry('First Year Six Months', vedDetails?.VedRate?.FirstYear?.SixMonths !== undefined ? formatCurrency(vedDetails.VedRate.FirstYear.SixMonths) : DASH),
+    entry('First Year Twelve Months', vedDetails?.VedRate?.FirstYear?.TwelveMonths !== undefined ? formatCurrency(vedDetails.VedRate.FirstYear.TwelveMonths) : DASH),
+    entry('Premium Vehicle Six Months', vedDetails?.VedRate?.PremiumVehicle?.SixMonths !== undefined ? formatCurrency(vedDetails.VedRate.PremiumVehicle.SixMonths) : DASH),
+    entry('Premium Vehicle Twelve Months', vedDetails?.VedRate?.PremiumVehicle?.TwelveMonths !== undefined ? formatCurrency(vedDetails.VedRate.PremiumVehicle.TwelveMonths) : DASH)
+  ].filter((pair, idx) => pair.value !== DASH || idx < 3);
+
+  if (vedEntries.length) {
+    yPos = addSectionTitle(doc, 'Vehicle Excise Duty Details', yPos, primaryColor);
+    yPos = renderKeyValueGrid(doc, vedEntries, yPos);
   }
 
   return yPos;
@@ -325,7 +689,7 @@ const renderModelDetails = (
   Object.entries(data).forEach(([key, value]) => {
     if (value === null || value === undefined) return;
     if (typeof value === 'object' && !Array.isArray(value)) return;
-    directEntries.push({ label: formatLabel(key), value: formatValue(value) });
+    directEntries.push({ label: `${formatLabel(key)}:`, value: formatGenericValue(key, value) });
   });
 
   if (directEntries.length) {
@@ -365,9 +729,195 @@ const renderGenericSection = (
   return renderObjectContent(doc, data, yPos, primaryColor, 0);
 };
 
+const renderMileageSummary = (
+  doc: any,
+  tests: NormalizedMotTest[],
+  yPos: number,
+  primaryColor: [number, number, number]
+): number => {
+  const mileageRecords = tests
+    .filter((test) => test.mileage !== null && test.date)
+    .sort((a, b) => {
+      const aTime = a.date ? a.date.getTime() : 0;
+      const bTime = b.date ? b.date.getTime() : 0;
+      return aTime - bTime;
+    });
+
+  if (!mileageRecords.length) return yPos;
+
+  const first = mileageRecords[0];
+  const last = mileageRecords[mileageRecords.length - 1];
+  const totalIncrease =
+    first && last && first.mileage !== null && last.mileage !== null ? last.mileage - first.mileage : null;
+  const yearsDiff =
+    first && last && first.date && last.date ? (last.date.getTime() - first.date.getTime()) / (1000 * 60 * 60 * 24 * 365.25) : null;
+  const averagePerYear = totalIncrease !== null && yearsDiff && yearsDiff > 0 ? totalIncrease / yearsDiff : null;
+
+  yPos = addSectionTitle(doc, 'Mileage History Summary', yPos, primaryColor);
+  yPos = ensurePageSpace(doc, yPos, 40);
+
+  const summaryEntries: GridEntry[] = [
+    { label: 'First Recorded:', value: first ? `${first.dateLabel} • ${first.mileageLabel}` : DASH },
+    { label: 'Latest Recorded:', value: last ? `${last.dateLabel} • ${last.mileageLabel}` : DASH },
+    { label: 'Total Increase:', value: totalIncrease !== null ? `${totalIncrease.toLocaleString('en-GB')} miles` : DASH },
+    { label: 'Average Per Year:', value: averagePerYear !== null ? `${averagePerYear.toFixed(0)} miles/year` : DASH },
+    { label: 'Records:', value: `${mileageRecords.length} entries` }
+  ];
+
+  yPos = renderKeyValueGrid(doc, summaryEntries, yPos, { startX: 25, columnWidth: 80, columnGap: 20 });
+
+  yPos = ensurePageSpace(doc, yPos, 12);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...primaryColor);
+  doc.text('Mileage Over Time', 25, yPos);
+  yPos += 6;
+
+  // Simple line chart
+  const chartHeight = 45;
+  const chartWidth = 150;
+  const chartStartX = 25;
+  const chartStartY = yPos + chartHeight;
+  const minMileage = Math.min(...mileageRecords.map((r) => r.mileage ?? 0));
+  const maxMileage = Math.max(...mileageRecords.map((r) => r.mileage ?? 0));
+  const mileageRange = Math.max(maxMileage - minMileage, 1);
+
+  doc.setDrawColor(200, 200, 200);
+  doc.rect(chartStartX, yPos, chartWidth, chartHeight);
+
+  doc.setDrawColor(...primaryColor);
+  doc.setLineWidth(0.6);
+  let lastPoint: { x: number; y: number } | null = null;
+  mileageRecords.forEach((record, idx) => {
+    const ratio = (record.mileage! - minMileage) / mileageRange;
+    const x =
+      chartStartX + (idx / Math.max(mileageRecords.length - 1, 1)) * chartWidth;
+    const y = chartStartY - ratio * chartHeight;
+    if (lastPoint) {
+      doc.line(lastPoint.x, lastPoint.y, x, y);
+    }
+    lastPoint = { x, y };
+  });
+
+  mileageRecords.forEach((record, idx) => {
+    const ratio = (record.mileage! - minMileage) / mileageRange;
+    const x =
+      chartStartX + (idx / Math.max(mileageRecords.length - 1, 1)) * chartWidth;
+    const y = chartStartY - ratio * chartHeight;
+    doc.setFillColor(...primaryColor);
+    doc.circle(x, y, 1.5, 'F');
+  });
+
+  yPos += chartHeight + 10;
+
+  // Mileage table
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(...primaryColor);
+  doc.text('Detailed Mileage Records', 25, yPos);
+  yPos += 5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(60, 60, 60);
+  mileageRecords.forEach((record, idx) => {
+    const change =
+      idx === 0 || record.mileage === null || mileageRecords[idx - 1].mileage === null
+        ? DASH
+        : `+${(record.mileage - (mileageRecords[idx - 1].mileage ?? 0)).toLocaleString('en-GB')} miles`;
+    const lines = [
+      `${record.dateLabel} • ${record.mileageLabel}`,
+      `Change since last record: ${change}`
+    ];
+    lines.forEach((line, lineIdx) => {
+      doc.text(line, 30, yPos + lineIdx * 4);
+    });
+    yPos += lines.length * 4 + 2;
+    yPos = ensurePageSpace(doc, yPos, 12);
+  });
+
+  return yPos + 4;
+};
+
+const renderFuelEfficiencyPanel = (
+  doc: any,
+  results: any,
+  vehicleData: any,
+  yPos: number,
+  primaryColor: [number, number, number]
+): number => {
+  const fuelEconomy = results?.ModelDetails?.Performance?.FuelEconomy || {};
+  let combinedMpg = toNumber(fuelEconomy.CombinedMpg);
+  let urbanMpg = toNumber(fuelEconomy.UrbanMpg);
+  let extraUrbanMpg = toNumber(fuelEconomy.ExtraUrbanMpg);
+  let combinedL = toNumber(fuelEconomy.CombinedLPer100Km);
+  let urbanL = toNumber(fuelEconomy.UrbanLPer100Km);
+  let extraL = toNumber(fuelEconomy.ExtraUrbanLPer100Km);
+
+  if (!combinedMpg && vehicleData?.fuelEconomyCombined) {
+    combinedMpg = toNumber(vehicleData.fuelEconomyCombined);
+  }
+
+  if (!combinedL && combinedMpg) combinedL = 282.481 / combinedMpg;
+  if (!urbanL && urbanMpg) urbanL = 282.481 / urbanMpg;
+  if (!extraL && extraUrbanMpg) extraL = 282.481 / extraUrbanMpg;
+  if (!urbanMpg && urbanL) urbanMpg = 282.481 / urbanL;
+  if (!extraUrbanMpg && extraL) extraUrbanMpg = 282.481 / extraL;
+
+  const co2 = toNumber(
+    results?.VehicleDetails?.VehicleStatus?.VehicleExciseDutyDetails?.DvlaCo2 ||
+      results?.ModelDetails?.Emissions?.Co2Emissions
+  );
+  const fuelType = textOrDash(results?.VehicleDetails?.VehicleIdentification?.DvlaFuelType || vehicleData?.fuelType);
+
+  if (!combinedMpg && !urbanMpg && !extraUrbanMpg && !co2) return yPos;
+
+  let efficiencyRating = 50;
+  if (combinedMpg) {
+    if (combinedMpg >= 60) efficiencyRating = 95;
+    else if (combinedMpg >= 50) efficiencyRating = 85;
+    else if (combinedMpg >= 40) efficiencyRating = 75;
+    else if (combinedMpg >= 30) efficiencyRating = 65;
+    else if (combinedMpg >= 20) efficiencyRating = 50;
+    else efficiencyRating = 35;
+  }
+
+  let category = 'Average';
+  if (efficiencyRating >= 85) category = 'Excellent';
+  else if (efficiencyRating >= 75) category = 'Very Good';
+  else if (efficiencyRating >= 65) category = 'Good';
+  else if (efficiencyRating < 50) category = 'Below Average';
+
+  yPos = addSectionTitle(doc, 'Fuel Economy & Efficiency', yPos, primaryColor);
+  yPos = ensurePageSpace(doc, yPos, 50);
+
+  const stats: GridEntry[] = [
+    { label: 'Combined MPG:', value: combinedMpg ? `${combinedMpg.toFixed(1)} mpg` : DASH },
+    { label: 'Urban MPG:', value: urbanMpg ? `${urbanMpg.toFixed(1)} mpg` : DASH },
+    { label: 'Extra Urban MPG:', value: extraUrbanMpg ? `${extraUrbanMpg.toFixed(1)} mpg` : DASH },
+    { label: 'Combined L/100km:', value: combinedL ? `${combinedL.toFixed(1)} L/100km` : DASH },
+    { label: 'CO₂ Emissions:', value: co2 !== null ? `${co2.toFixed(0)} g/km` : DASH },
+    { label: 'Fuel Type:', value: fuelType }
+  ];
+
+  yPos = renderKeyValueGrid(doc, stats, yPos, { startX: 25, columnWidth: 80, columnGap: 20 });
+  yPos = ensurePageSpace(doc, yPos, 20);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(...primaryColor);
+  doc.text('Efficiency Rating', 25, yPos);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(40, 40, 40);
+  doc.text(`${efficiencyRating}% • ${category}`, 65, yPos);
+
+  return yPos + 10;
+};
+
 const renderMotHistory = (
   doc: any,
   motData: any,
+  vehicleData: any,
+  results: any,
   yPos: number,
   palette: {
     primary: [number, number, number];
@@ -377,99 +927,87 @@ const renderMotHistory = (
     failure: [number, number, number];
   }
 ): number => {
-  if (!motData) return yPos;
-
-  let motTests: any[] = [];
-  if (Array.isArray(motData)) {
-    motTests = motData;
-  } else if (Array.isArray(motData?.MotTestDetailsList)) {
-    motTests = motData.MotTestDetailsList;
-  } else if (Array.isArray(motData?.MotTests)) {
-    motTests = motData.MotTests;
-  }
-
+  const motTests = normalizeMotTests(motData);
   if (!motTests.length) return yPos;
 
-  yPos = addSectionTitle(doc, 'MOT History', yPos, palette.primary);
-  doc.setFontSize(10);
+  yPos = addSectionTitle(doc, 'MOT History & Mileage Records', yPos, palette.primary);
+
+  const nonRetest = motTests.filter((test) => !test.isRetest);
+  const passCount = nonRetest.filter((test) => test.passed).length;
+  const failCount = nonRetest.length - passCount;
+  const passRate = nonRetest.length ? Math.round((passCount / nonRetest.length) * 100) : 0;
+
+  yPos = ensurePageSpace(doc, yPos, 18);
+  doc.setFillColor(245, 247, 255);
+  doc.roundedRect(20, yPos - 10, 170, 18, 3, 3, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...palette.primary);
+  doc.text(`Pass Rate: ${passRate}%`, 25, yPos);
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
   doc.setTextColor(...palette.text);
-  doc.text(`${motTests.length} MOT test(s) found`, 20, yPos);
-  yPos += 8;
+  doc.text(`Based on ${nonRetest.length} tests (excluding retests)`, 25, yPos + 6);
+  doc.text(`Passed: ${passCount}`, 120, yPos);
+  doc.text(`Failed: ${failCount}`, 120, yPos + 6);
+
+  yPos += 15;
 
   motTests.forEach((test, index) => {
-    yPos = ensurePageSpace(doc, yPos, 32);
+    yPos = ensurePageSpace(doc, yPos, 40);
+    doc.setFillColor(248, 249, 255);
+    doc.roundedRect(20, yPos - 6, 170, 40, 2, 2, 'F');
 
-    doc.setFillColor(245, 247, 255);
-    doc.roundedRect(20, yPos - 3, 170, 9, 2, 2, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.setTextColor(...palette.text);
-    doc.text(`Test ${index + 1} – ${formatValue(test.TestDate)}`, 25, yPos + 3);
+    doc.setTextColor(...palette.primary);
+    doc.text(`Test ${index + 1} – ${test.dateLabel}`, 25, yPos);
 
-    const isPass = (test.TestResult || '').toString().toLowerCase() === 'pass';
-    doc.setFillColor(...(isPass ? [16, 185, 129] : [239, 68, 68]));
-    doc.roundedRect(150, yPos - 3, 35, 9, 2, 2, 'F');
+    const resultColor = test.passed ? [16, 185, 129] : [220, 38, 38];
+    doc.setFillColor(...resultColor);
+    doc.roundedRect(150, yPos - 4, 35, 10, 2, 2, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(9);
-    doc.text((test.TestResult || 'N/A').toString().toUpperCase(), 167, yPos + 3, { align: 'center' });
+    doc.text(test.resultLabel, 167, yPos + 2, { align: 'center' });
 
-    yPos += 12;
-
-    const infoEntries: GridEntry[] = [];
-    if (test.OdometerReading !== undefined && test.OdometerReading !== null) {
-      const mileage = Number(test.OdometerReading);
-      infoEntries.push({
-        label: 'Mileage',
-        value: Number.isNaN(mileage) ? formatValue(test.OdometerReading) : `${mileage.toLocaleString()} miles`
-      });
-    }
-    if (test.ExpiryDate) {
-      infoEntries.push({ label: 'Expiry Date', value: formatValue(test.ExpiryDate) });
-    }
-    if (test.TestNumber) {
-      infoEntries.push({ label: 'Test Number', value: formatValue(test.TestNumber) });
-    }
-    if (test.TestLocation) {
-      infoEntries.push({ label: 'Test Location', value: formatValue(test.TestLocation) });
-    }
-    if (test.TestClass) {
-      infoEntries.push({ label: 'Test Class', value: formatValue(test.TestClass) });
-    }
+    yPos += 10;
+    const infoEntries: GridEntry[] = [
+      { label: 'Mileage At Test:', value: test.mileageLabel },
+      { label: 'Expiry Date:', value: test.expiryDate },
+      { label: 'Certificate:', value: test.testNumber },
+      { label: 'Test Station:', value: test.location }
+    ].filter((entry) => entry.value && entry.value !== DASH);
 
     if (infoEntries.length) {
-      yPos = renderKeyValueGrid(doc, infoEntries, yPos, { startX: 25, columnWidth: 70, columnGap: 20 });
+      yPos = renderKeyValueGrid(doc, infoEntries, yPos, { startX: 25, columnWidth: 75, columnGap: 20 });
     }
 
-    const renderList = (items: any[], title: string, color: [number, number, number]) => {
-      if (!items || !items.length) return yPos;
-      yPos = ensurePageSpace(doc, yPos, items.length * 5 + 8);
+    const renderAnnotationList = (title: string, items: string[], color: [number, number, number]) => {
+      if (!items.length) return;
+      yPos = ensurePageSpace(doc, yPos, items.length * 5 + 6);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);
       doc.setTextColor(...color);
-      doc.text(`${title} (${items.length}):`, 25, yPos);
+      doc.text(`${title} (${items.length})`, 25, yPos);
       yPos += 5;
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...palette.gray);
-      items.forEach((item) => {
-        const text = item?.AdvisoryNotice || item?.FailureReason || formatValue(item);
-        const lines = doc.splitTextToSize(text, 160);
+      items.forEach((text) => {
+        const lines = doc.splitTextToSize(text, 155);
         doc.text(lines, 30, yPos);
         yPos += lines.length * 4;
       });
-      return yPos + 2;
+      yPos += 3;
     };
 
-    if (test.AdvisoryNoticeList?.length) {
-      yPos = renderList(test.AdvisoryNoticeList, 'Advisories', palette.advisory);
-    }
+    renderAnnotationList('Advisories', test.advisories, palette.advisory);
+    renderAnnotationList('Failures', test.failures, palette.failure);
 
-    if (test.FailureReasonList?.length) {
-      yPos = renderList(test.FailureReasonList, 'Failures', palette.failure);
-    }
-
-    yPos += 6;
+    yPos += 4;
   });
+
+  yPos = renderMileageSummary(doc, motTests, yPos, palette.primary);
+  yPos = renderFuelEfficiencyPanel(doc, results, vehicleData, yPos, palette.primary);
 
   return yPos;
 };
@@ -505,7 +1043,7 @@ export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buf
 
   // Header
   doc.setFillColor(...palette.primary);
-  doc.rect(0, 0, 210, 40, 'F');
+  doc.rect(0, 0, 210, 45, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(24);
@@ -514,21 +1052,22 @@ export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buf
   doc.text('HG Verified Vehicle Check', 105, 25, { align: 'center' });
 
   doc.setFillColor(255, 215, 0);
-  doc.roundedRect(70, 30, 70, 12, 2, 2, 'F');
+  doc.roundedRect(60, 28, 90, 16, 3, 3, 'F');
   doc.setTextColor(0, 0, 0);
-  doc.setFontSize(18);
-  doc.text(registration.toUpperCase(), 105, 39, { align: 'center' });
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(registration.toUpperCase(), 105, 40, { align: 'center' });
 
-  let yPos = 52;
+  let yPos = 55;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(...palette.text);
-  doc.text(`Date of Check: ${checkDate.toLocaleDateString('en-GB')}`, 20, yPos);
-  yPos += 5;
+  doc.text(`Registration: ${registration.toUpperCase()}`, 20, yPos);
+  yPos += 6;
+  doc.text(`Date Of Check: ${formatDate(checkDate, { includeTime: true })}`, 20, yPos);
+  yPos += 6;
   doc.text(`Reference: ${resolvedReference}`, 20, yPos);
-  yPos += 5;
-  doc.text(`Report Type: ${isPremium ? 'Comprehensive' : 'Basic'}`, 20, yPos);
-  yPos += 12;
+  yPos += 10;
 
   const results = reportRaw?.Results || {};
 
@@ -562,7 +1101,7 @@ export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buf
 
     switch (section.key) {
       case 'VehicleDetails':
-        yPos = renderVehicleDetails(doc, sectionData, yPos, palette.primary);
+        yPos = renderVehicleDetails(doc, sectionData, registration, yPos, palette.primary);
         break;
       case 'ModelDetails':
         yPos = renderModelDetails(doc, sectionData, yPos, palette.primary);
@@ -571,7 +1110,7 @@ export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buf
         yPos = renderGenericSection(doc, section.title, sectionData, yPos, palette.primary);
         break;
       case 'MotHistoryDetails':
-        yPos = renderMotHistory(doc, sectionData, yPos, palette);
+        yPos = renderMotHistory(doc, sectionData, unified.vehicleData, results, yPos, palette);
         break;
       default:
         yPos = renderGenericSection(doc, section.title, sectionData, yPos, palette.primary);
