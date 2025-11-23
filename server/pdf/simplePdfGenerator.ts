@@ -6,14 +6,36 @@ type AutoTableFn = (...args: any[]) => any;
 let cachedJsPDF: JsPDFConstructor | null = null;
 let cachedAutoTable: AutoTableFn | null = null;
 
+const resolveExport = <T = any>(label: string, candidates: Array<T | undefined>): T | null => {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'function' || typeof candidate === 'object' && candidate) {
+      return candidate as T;
+    }
+  }
+  return null;
+};
+
 async function loadJsPDFConstructor(): Promise<JsPDFConstructor> {
   if (cachedJsPDF) return cachedJsPDF;
 
   const mod: any = await import('jspdf');
-  const ctor = mod.jsPDF || mod.default || mod;
+  const ctor = resolveExport<JsPDFConstructor>('jsPDF', [
+    mod?.jsPDF,
+    mod?.default?.jsPDF,
+    mod?.default,
+    mod
+  ]);
+
   if (typeof ctor !== 'function') {
+    console.error(
+      'Failed to resolve jsPDF constructor. Module keys:',
+      Object.keys(mod || {}),
+      'default keys:',
+      Object.keys(mod?.default || {})
+    );
     throw new Error('Failed to load jsPDF constructor');
   }
+
   cachedJsPDF = ctor;
   return ctor;
 }
@@ -22,10 +44,18 @@ async function loadAutoTable(): Promise<AutoTableFn> {
   if (cachedAutoTable) return cachedAutoTable;
 
   const mod: any = await import('jspdf-autotable');
-  const fn = mod.default || mod;
+  const fn = resolveExport<AutoTableFn>('autoTable', [mod?.default, mod]);
+
   if (typeof fn !== 'function') {
+    console.error(
+      'Failed to resolve jspdf-autotable export. Module keys:',
+      Object.keys(mod || {}),
+      'default keys:',
+      Object.keys(mod?.default || {})
+    );
     throw new Error('Failed to load jspdf-autotable plugin');
   }
+
   cachedAutoTable = fn;
   return fn;
 }
