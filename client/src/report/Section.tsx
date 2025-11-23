@@ -2,12 +2,15 @@ import React from 'react';
 import { SchemaNode } from './types';
 import { GenericObject } from './GenericObject';
 
-export const Section: React.FC<{
+interface SectionProps {
   title: string;
   schema: SchemaNode[];
   data: any;
   id?: string;
-}> = ({ title, schema, data, id }) => {
+  sectionPath?: string;
+}
+
+export const Section: React.FC<SectionProps> = ({ title, schema, data, id, sectionPath }) => {
   // Check if we have both schema and data
   const hasSchema = Array.isArray(schema) && schema.length > 0;
   const hasData = data !== null && data !== undefined;
@@ -25,7 +28,7 @@ export const Section: React.FC<{
       </header>
       <div className="section__body">
         {hasSchema && hasData && hasAnyDataValues ? (
-          <GenericObject schema={schema} data={data} />
+          <GenericObject schema={schema} data={data} basePath={sectionPath} />
         ) : (
           <div style={{ padding: '1rem', color: '#6b7280', fontStyle: 'italic' }}>
             {!hasSchema ? 'Schema not available for this section' : 

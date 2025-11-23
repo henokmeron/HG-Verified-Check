@@ -181,10 +181,17 @@ function getRiskClass(label: string, value: any): 'pass' | 'fail' | 'warn' | nul
   return null;
 }
 
-export const KeyValue: React.FC<{ label: string; value: any; type?: string }> = ({label, value, type}) => {
+interface KeyValueProps {
+  label: string;
+  value: any;
+  type?: string;
+  fieldPath?: string;
+}
+
+export const KeyValue: React.FC<KeyValueProps> = ({label, value, type, fieldPath}) => {
   const riskClass = getRiskClass(label, value);
   const className = riskClass ? `kv kv--${riskClass}` : 'kv';
-  const formattedValue = formatValue(value, type, label);
+  const formattedValue = formatValue(value, type, label, fieldPath);
   
   return (
     <div className={className}>

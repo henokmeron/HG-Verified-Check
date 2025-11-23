@@ -1,4 +1,6 @@
 import type { UnifiedReportData } from './unifiedReportData';
+import { formatReportValue } from '@shared/reportFormatting';
+import { getFieldConfig, isFieldHidden as isSharedHidden } from '@shared/reportConfig';
 
 type JsPDFConstructor = typeof import('jspdf').jsPDF;
 
@@ -42,6 +44,41 @@ async function loadJsPDFConstructor(): Promise<JsPDFConstructor> {
 }
 
 const DASH = '—';
+const EMPTY_VALUE = '—';
+
+const isNil = (value: any) => value === null || value === undefined;
+
+const getLabelForPath = (path: string, fallback: string) => {
+  const override = getFieldConfig(path);
+  return override?.label || fallback;
+};
+
+const shouldHideField = (pathOrName: string) => {
+  if (!pathOrName) return false;
+  return isSharedHidden(pathOrName);
+};
+
+const formatFieldValue = (value: any, path: string, fallbackLabel: string): string => {
+  const formatted = formatReportValue(value, path, fallbackLabel);
+  return formatted || EMPTY_VALUE;
+};
+
+const createFieldEntry = (path: string, fallbackLabel: string, value: any): GridEntry | null => {
+  if (shouldHideField(path) || shouldHideField(path.split('.').pop() || '')) {
+    return null;
+  }
+  if (isNil(value) || value === '') {
+    return null;
+  }
+
+  const formatted = formatFieldValue(value, path, fallbackLabel);
+  if (!formatted || formatted === EMPTY_VALUE) {
+    return null;
+  }
+
+  const label = getLabelForPath(path, fallbackLabel);
+  return { label: `${label}:`, value: formatted };
+};
 
 const toNumber = (value: any): number | null => {
   if (value === null || value === undefined) return null;
@@ -62,12 +99,6 @@ const formatNumber = (value: any, options: { decimals?: number; group?: boolean 
     maximumFractionDigits: decimals,
     useGrouping
   });
-};
-
-const formatCurrency = (value: any): string => {
-  const num = toNumber(value);
-  if (num === null) return DASH;
-  return `£${num.toFixed(2)}`;
 };
 
 const formatUnit = (value: any, unit: string, options?: { decimals?: number; group?: boolean }): string => {
@@ -111,18 +142,6 @@ const textOrDash = (value: any): string => {
   return str || DASH;
 };
 
-const formatMileage = (value: any): string => {
-  const num = toNumber(value);
-  if (num === null) return DASH;
-  return `${num.toLocaleString('en-GB')} miles`;
-};
-
-const formatPercentage = (value: any): string => {
-  const num = toNumber(value);
-  if (num === null) return DASH;
-  return `${num.toFixed(0)}%`;
-};
-
 const LABEL_OVERRIDES: Record<string, string> = {
   Vrm: 'VRM',
   Vin: 'VIN',
@@ -155,23 +174,6 @@ const LABEL_OVERRIDES: Record<string, string> = {
   UrbanLPer100Km: 'Urban L/100km',
   ExtraUrbanLPer100Km: 'Extra Urban L/100km'
 };
-
-const HIDDEN_FIELD_KEYS = new Set([
-  'StatusCode',
-  'StatusMessage',
-  'DocumentVersion',
-  'GeneratedAt',
-  'UpdateTimeStamp',
-  'PackageName',
-  'ResponseId',
-  'RequestInformation',
-  'ResponseInformation',
-  'UkvdId',
-  'SubscriptionOptionList',
-  'Software',
-  'AdditionalInformation',
-  'DocumentVersionDescription'
-]);
 
 const UNIT_OVERRIDES: Record<string, string> = {
   DvlaCo2: 'g/km',
@@ -306,10 +308,10 @@ const normalizeMotTests = (motData: any): NormalizedMotTest[] => {
         (test.AnnotationList as any[]) || (test.AdvisoryNoticeList as any[]) || (test.Failures as any[])
       );
       const extraAdvisories = Array.isArray(test.AdvisoryNoticeList)
-        ? test.AdvisoryNoticeList.map((item) => item.AdvisoryNotice || item.Text).filter(Boolean)
+        ? test.AdvisoryNoticeList.map((item: any) => item.AdvisoryNotice || item.Text).filter(Boolean)
         : [];
       const extraFailures = Array.isArray(test.FailureReasonList)
-        ? test.FailureReasonList.map((item) => item.FailureReason || item.Text).filter(Boolean)
+        ? test.FailureReasonList.map((item: any) => item.FailureReason || item.Text).filter(Boolean)
         : [];
 
       const advisories = [...annotationBuckets.advisories, ...extraAdvisories];
@@ -419,7 +421,7 @@ const renderKeyValueGrid = (
     const rowHeight = rowMetrics.reduce((max, current) => Math.max(max, current.blockHeight), 12);
     yPos = ensurePageSpace(doc, yPos, rowHeight + 4);
 
-    row.forEach((entry, idx) => {
+    row.forEach((_, idx) => {
       const metric = rowMetrics[idx];
       const x = startX + idx * (columnWidth + columnGap);
 
@@ -446,29 +448,55 @@ const renderObjectContent = (
   data: any,
   yPos: number,
   primaryColor: [number, number, number],
-  depth = 0
+  depth = 0,
+  basePath = ''
 ): number => {
   if (!data || typeof data !== 'object') return yPos;
 
   const directEntries: GridEntry[] = [];
-  const nestedEntries: Array<{ title: string; value: any }> = [];
+  const nestedEntries: Array<{ title: string; value: any; path: string }> = [];
 
   for (const [key, value] of Object.entries(data)) {
     if (value === null || value === undefined) continue;
-    if (HIDDEN_FIELD_KEYS.has(key)) continue;
+    const currentPath = basePath ? `${basePath}.${key}` : key;
+    if (shouldHideField(currentPath) || shouldHideField(key)) continue;
 
     if (Array.isArray(value)) {
-      directEntries.push({ label: `${formatLabel(key)}:`, value: formatArrayValue(value) });
+      const primitiveArray = value.every(
+        (item) => item === null || item === undefined || typeof item !== 'object'
+      );
+      if (primitiveArray) {
+        const entry = createFieldEntry(currentPath, formatLabel(key), formatArrayValue(value));
+        if (entry) {
+          directEntries.push(entry);
+        }
+      } else {
+        value.forEach((item, index) => {
+          if (!item || typeof item !== 'object') return;
+          nestedEntries.push({
+            title: `${getLabelForPath(currentPath, formatLabel(key))}${value.length > 1 ? ` ${index + 1}` : ''}`.trim(),
+            value: item,
+            path: currentPath
+          });
+        });
+      }
       continue;
     }
 
     if (typeof value === 'object') {
       if (Object.keys(value).length === 0) continue;
-      nestedEntries.push({ title: formatLabel(key), value });
+      nestedEntries.push({
+        title: getLabelForPath(currentPath, formatLabel(key)),
+        value,
+        path: currentPath
+      });
       continue;
     }
 
-    directEntries.push({ label: `${formatLabel(key)}:`, value: formatGenericValue(key, value) });
+    const entry = createFieldEntry(currentPath, formatLabel(key), value);
+    if (entry) {
+      directEntries.push(entry);
+    }
   }
 
   if (directEntries.length) {
@@ -478,7 +506,7 @@ const renderObjectContent = (
 
   for (const nested of nestedEntries) {
     yPos = addSubSectionTitle(doc, nested.title, yPos, primaryColor);
-    yPos = renderObjectContent(doc, nested.value, yPos, primaryColor, depth + 1);
+    yPos = renderObjectContent(doc, nested.value, yPos, primaryColor, depth + 1, nested.path);
   }
 
   return yPos;
@@ -492,28 +520,34 @@ const renderVehicleDetails = (
   primaryColor: [number, number, number]
 ): number => {
   if (!data || typeof data !== 'object') return yPos;
-  const entry = (label: string, value: string) => ({ label: `${label}:`, value: value ?? DASH });
+  const entry = (label: string, value: any, path?: string): GridEntry | null => {
+    if (path) {
+      return createFieldEntry(path, label, value);
+    }
+    if (value === null || value === undefined || value === '') return null;
+    return { label: `${label}:`, value: value ?? DASH };
+  };
 
   yPos = addSectionTitle(doc, 'Vehicle Details', yPos, primaryColor);
 
   const vehicleId = data?.VehicleIdentification || {};
   const identificationEntries: GridEntry[] = [
-    entry('VRM', textOrDash(vehicleId.Vrm || registration)),
-    entry('VIN', textOrDash(vehicleId.Vin)),
-    entry('VIN Last 5', textOrDash(vehicleId.VinLast5)),
-    entry('DVLA Make', textOrDash(vehicleId.DvlaMake)),
-    entry('DVLA Model', textOrDash(vehicleId.DvlaModel)),
-    entry('DVLA Wheel Plan', textOrDash(vehicleId.DvlaWheelPlan)),
-    entry('Date First Registered in UK', formatDate(vehicleId.DateFirstRegisteredInUk)),
-    entry('Date First Registered', formatDate(vehicleId.DateFirstRegistered)),
-    entry('Date Of Manufacture', formatDate(vehicleId.DateOfManufacture)),
-    entry('Year Of Manufacture', formatNumber(vehicleId.YearOfManufacture, { group: false })),
-    entry('Vehicle Used Before First Registration', boolToText(vehicleId.VehicleUsedBeforeFirstRegistration)),
-    entry('Engine Number', textOrDash(vehicleId.EngineNumber)),
-    entry('Previous VRM NI', textOrDash(vehicleId.PreviousVrmNi)),
-    entry('DVLA Body Type', textOrDash(vehicleId.DvlaBodyType)),
-    entry('DVLA Fuel Type', textOrDash(vehicleId.DvlaFuelType))
-  ].filter((pair) => pair.value !== DASH);
+    entry('VRM', vehicleId.Vrm || registration, 'VehicleDetails.VehicleIdentification.Vrm'),
+    entry('VIN', vehicleId.Vin, 'VehicleDetails.VehicleIdentification.Vin'),
+    entry('VIN Last 5', vehicleId.VinLast5, 'VehicleDetails.VehicleIdentification.VinLast5'),
+    entry('DVLA Make', vehicleId.DvlaMake, 'VehicleDetails.VehicleIdentification.DvlaMake'),
+    entry('DVLA Model', vehicleId.DvlaModel, 'VehicleDetails.VehicleIdentification.DvlaModel'),
+    entry('DVLA Wheel Plan', vehicleId.DvlaWheelPlan, 'VehicleDetails.VehicleIdentification.DvlaWheelPlan'),
+    entry('Date First Registered in UK', vehicleId.DateFirstRegisteredInUk, 'VehicleDetails.VehicleIdentification.DateFirstRegisteredInUk'),
+    entry('Date First Registered', vehicleId.DateFirstRegistered, 'VehicleDetails.VehicleIdentification.DateFirstRegistered'),
+    entry('Date Of Manufacture', vehicleId.DateOfManufacture, 'VehicleDetails.VehicleIdentification.DateOfManufacture'),
+    entry('Year Of Manufacture', vehicleId.YearOfManufacture, 'VehicleDetails.VehicleIdentification.YearOfManufacture'),
+    entry('Vehicle Used Before First Registration', vehicleId.VehicleUsedBeforeFirstRegistration, 'VehicleDetails.VehicleIdentification.VehicleUsedBeforeFirstRegistration'),
+    entry('Engine Number', vehicleId.EngineNumber, 'VehicleDetails.VehicleIdentification.EngineNumber'),
+    entry('Previous VRM NI', vehicleId.PreviousVrmNi, 'VehicleDetails.VehicleIdentification.PreviousVrmNi'),
+    entry('DVLA Body Type', vehicleId.DvlaBodyType, 'VehicleDetails.VehicleIdentification.DvlaBodyType'),
+    entry('DVLA Fuel Type', vehicleId.DvlaFuelType, 'VehicleDetails.VehicleIdentification.DvlaFuelType')
+  ].filter(Boolean) as GridEntry[];
 
   if (identificationEntries.length) {
     yPos = addSubSectionTitle(doc, 'Vehicle Identification', yPos, primaryColor);
@@ -522,18 +556,18 @@ const renderVehicleDetails = (
 
   const vehicleStatus = data?.VehicleStatus || {};
   const statusEntries: GridEntry[] = [
-    entry('Is Imported', boolToText(vehicleStatus.IsImported)),
-    entry('Is Imported From NI', boolToText(vehicleStatus.IsImportedFromNi)),
-    entry('Is Imported From Non EU', boolToText(vehicleStatus.IsImportedFromOutsideEu)),
-    entry('Date Imported', formatDate(vehicleStatus.DateImported)),
-    entry('Certificate Of Destruction Issued', boolToText(vehicleStatus.CertificateOfDestructionIssued)),
-    entry('Is Exported', boolToText(vehicleStatus.IsExported)),
-    entry('Date Exported', formatDate(vehicleStatus.DateExported)),
-    entry('Is Scrapped', boolToText(vehicleStatus.IsScrapped)),
-    entry('Is Unscrapped', boolToText(vehicleStatus.IsUnscrapped)),
-    entry('Date Scrapped', formatDate(vehicleStatus.DateScrapped)),
-    entry('DVLA Cherished Transfer Marker', boolToText(vehicleStatus.DvlaCherishedTransferMarker))
-  ].filter((pair) => pair.value !== DASH);
+    entry('Is Imported', vehicleStatus.IsImported, 'VehicleDetails.VehicleStatus.IsImported'),
+    entry('Is Imported From NI', vehicleStatus.IsImportedFromNi, 'VehicleDetails.VehicleStatus.IsImportedFromNi'),
+    entry('Is Imported From Non EU', vehicleStatus.IsImportedFromOutsideEu, 'VehicleDetails.VehicleStatus.IsImportedFromOutsideEu'),
+    entry('Date Imported', vehicleStatus.DateImported, 'VehicleDetails.VehicleStatus.DateImported'),
+    entry('Certificate Of Destruction Issued', vehicleStatus.CertificateOfDestructionIssued, 'VehicleDetails.VehicleStatus.CertificateOfDestructionIssued'),
+    entry('Is Exported', vehicleStatus.IsExported, 'VehicleDetails.VehicleStatus.IsExported'),
+    entry('Date Exported', vehicleStatus.DateExported, 'VehicleDetails.VehicleStatus.DateExported'),
+    entry('Is Scrapped', vehicleStatus.IsScrapped, 'VehicleDetails.VehicleStatus.IsScrapped'),
+    entry('Is Unscrapped', vehicleStatus.IsUnscrapped, 'VehicleDetails.VehicleStatus.IsUnscrapped'),
+    entry('Date Scrapped', vehicleStatus.DateScrapped, 'VehicleDetails.VehicleStatus.DateScrapped'),
+    entry('DVLA Cherished Transfer Marker', vehicleStatus.DvlaCherishedTransferMarker, 'VehicleDetails.VehicleStatus.DvlaCherishedTransferMarker')
+  ].filter(Boolean) as GridEntry[];
 
   if (statusEntries.length) {
     yPos = addSubSectionTitle(doc, 'Vehicle Status', yPos, primaryColor);
@@ -543,10 +577,10 @@ const renderVehicleDetails = (
   const history = data?.VehicleHistory || {};
   const colorDetails = history?.ColourDetails || {};
   const colorEntries: GridEntry[] = [
-    entry('Current Colour', textOrDash(colorDetails.CurrentColour)),
-    entry('Number Of Colour Changes', formatNumber(colorDetails.NumberOfColourChanges)),
-    entry('Original Colour', textOrDash(colorDetails.OriginalColour))
-  ].filter((pair) => pair.value !== DASH);
+    entry('Current Colour', colorDetails.CurrentColour, 'VehicleDetails.VehicleHistory.ColourDetails.CurrentColour'),
+    entry('Number Of Colour Changes', colorDetails.NumberOfColourChanges, 'VehicleDetails.VehicleHistory.ColourDetails.NumberOfColourChanges'),
+    entry('Original Colour', colorDetails.OriginalColour, 'VehicleDetails.VehicleHistory.ColourDetails.OriginalColour')
+  ].filter(Boolean) as GridEntry[];
 
   const keeperList = Array.isArray(history?.KeeperChangeList) ? history.KeeperChangeList : [];
   const plateList = Array.isArray(history?.PlateChangeList) ? history.PlateChangeList : [];
@@ -571,9 +605,9 @@ const renderVehicleDetails = (
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.setTextColor(60, 60, 60);
-    items.forEach((item, idx) => {
+    items.forEach((item: any, idx) => {
       const lines = formatter(item, idx);
-      lines.forEach((line, lineIdx) => {
+      lines.forEach((line: string, lineIdx: number) => {
         doc.text(line, 30, yPos + lineIdx * 4);
       });
       yPos += lines.length * 4 + 2;
@@ -608,14 +642,14 @@ const renderVehicleDetails = (
 
   const tech = data?.DvlaTechnicalDetails || {};
   const techEntries: GridEntry[] = [
-    entry('Number Of Seats', formatNumber(tech.NumberOfSeats)),
-    entry('Engine Capacity', formatUnit(tech.EngineCapacityCc || tech.EngineCapacity, 'cc')),
-    entry('Max Net Power', formatUnit(tech.MaxNetPowerKw || tech.MaxNetPower, 'kW')),
-    entry('Mass In Service', formatUnit(tech.MassInServiceKg || tech.MassInService, 'kg')),
-    entry('Power To Weight Ratio', formatUnit(tech.PowerToWeightRatio, 'kg')),
-    entry('Max Permissible Braked Trailer Mass', formatUnit(tech.MaxPermissibleBrakedTrailerMassKg, 'kg')),
-    entry('Max Permissible Unbraked Trailer Mass', formatUnit(tech.MaxPermissibleUnbrakedTrailerMassKg, 'kg'))
-  ].filter((pair) => pair.value !== DASH);
+    entry('Number Of Seats', tech.NumberOfSeats, 'VehicleDetails.DvlaTechnicalDetails.NumberOfSeats'),
+    entry('Engine Capacity', tech.EngineCapacityCc || tech.EngineCapacity, 'VehicleDetails.DvlaTechnicalDetails.EngineCapacityCc'),
+    entry('Max Net Power', tech.MaxNetPowerKw || tech.MaxNetPower, 'VehicleDetails.DvlaTechnicalDetails.MaxNetPower'),
+    entry('Mass In Service', tech.MassInServiceKg || tech.MassInService, 'VehicleDetails.DvlaTechnicalDetails.MassInService'),
+    entry('Power To Weight Ratio', tech.PowerToWeightRatio, 'VehicleDetails.DvlaTechnicalDetails.PowerToWeightRatio'),
+    entry('Max Permissible Braked Trailer Mass', tech.MaxPermissibleBrakedTrailerMassKg, 'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleBrakedTrailerMassKg'),
+    entry('Max Permissible Unbraked Trailer Mass', tech.MaxPermissibleUnbrakedTrailerMassKg, 'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleUnbrakedTrailerMassKg')
+  ].filter(Boolean) as GridEntry[];
 
   if (techEntries.length) {
     yPos = addSubSectionTitle(doc, 'DVLA Technical Details', yPos, primaryColor);
@@ -624,16 +658,16 @@ const renderVehicleDetails = (
 
   const vehicleTaxDetails = data?.VehicleTaxDetails || {};
   const taxEntries: GridEntry[] = [
-    entry('VRM', textOrDash(vehicleTaxDetails.Vrm)),
-    entry('Make', textOrDash(vehicleTaxDetails.Make)),
-    entry('CO₂ Emissions', formatUnit(vehicleTaxDetails.Co2Emissions, 'g/km')),
-    entry('MOT Status', textOrDash(vehicleTaxDetails.MotStatus)),
-    entry('Year Of Manufacture', formatNumber(vehicleTaxDetails.YearOfManufacture, { group: false })),
-    entry('Tax Due Date', formatDate(vehicleTaxDetails.TaxDueDate)),
-    entry('Tax Status', textOrDash(vehicleTaxDetails.TaxStatus)),
-    entry('Tax Is Currently Valid', boolToText(vehicleTaxDetails.TaxIsCurrentlyValid)),
-    entry('Tax Days Remaining', formatNumber(vehicleTaxDetails.TaxDaysRemaining))
-  ].filter((pair) => pair.value !== DASH);
+    entry('VRM', vehicleTaxDetails.Vrm, 'VehicleTaxDetails.Vrm'),
+    entry('Make', vehicleTaxDetails.Make, 'VehicleTaxDetails.Make'),
+    entry('CO₂ Emissions', vehicleTaxDetails.Co2Emissions, 'VehicleTaxDetails.Co2Emissions'),
+    entry('MOT Status', vehicleTaxDetails.MotStatus, 'VehicleTaxDetails.MotStatus'),
+    entry('Year Of Manufacture', vehicleTaxDetails.YearOfManufacture, 'VehicleTaxDetails.YearOfManufacture'),
+    entry('Tax Due Date', vehicleTaxDetails.TaxDueDate, 'VehicleTaxDetails.TaxDueDate'),
+    entry('Tax Status', vehicleTaxDetails.TaxStatus, 'VehicleTaxDetails.TaxStatus'),
+    entry('Tax Is Currently Valid', vehicleTaxDetails.TaxIsCurrentlyValid, 'VehicleTaxDetails.TaxIsCurrentlyValid'),
+    entry('Tax Days Remaining', vehicleTaxDetails.TaxDaysRemaining, 'VehicleTaxDetails.TaxDaysRemaining')
+  ].filter(Boolean) as GridEntry[];
 
   if (taxEntries.length) {
     yPos = addSectionTitle(doc, 'Vehicle Tax Details', yPos, primaryColor);
@@ -642,16 +676,16 @@ const renderVehicleDetails = (
 
   const vedDetails = vehicleStatus?.VehicleExciseDutyDetails || {};
   const vedEntries: GridEntry[] = [
-    entry('DVLA CO2', formatUnit(vedDetails.DvlaCo2, 'g/km')),
-    entry('DVLA CO2 Band', textOrDash(vedDetails.DvlaCo2Band)),
-    entry('DVLA Band', textOrDash(vedDetails.DvlaBand)),
-    entry('Standard Six Months', vedDetails?.VedRate?.Standard?.SixMonths !== undefined ? formatCurrency(vedDetails.VedRate.Standard.SixMonths) : DASH),
-    entry('Standard Twelve Months', vedDetails?.VedRate?.Standard?.TwelveMonths !== undefined ? formatCurrency(vedDetails.VedRate.Standard.TwelveMonths) : DASH),
-    entry('First Year Six Months', vedDetails?.VedRate?.FirstYear?.SixMonths !== undefined ? formatCurrency(vedDetails.VedRate.FirstYear.SixMonths) : DASH),
-    entry('First Year Twelve Months', vedDetails?.VedRate?.FirstYear?.TwelveMonths !== undefined ? formatCurrency(vedDetails.VedRate.FirstYear.TwelveMonths) : DASH),
-    entry('Premium Vehicle Six Months', vedDetails?.VedRate?.PremiumVehicle?.SixMonths !== undefined ? formatCurrency(vedDetails.VedRate.PremiumVehicle.SixMonths) : DASH),
-    entry('Premium Vehicle Twelve Months', vedDetails?.VedRate?.PremiumVehicle?.TwelveMonths !== undefined ? formatCurrency(vedDetails.VedRate.PremiumVehicle.TwelveMonths) : DASH)
-  ].filter((pair, idx) => pair.value !== DASH || idx < 3);
+    entry('DVLA CO2', vedDetails.DvlaCo2, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.DvlaCo2'),
+    entry('DVLA CO2 Band', vedDetails.DvlaCo2Band, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.DvlaCo2Band'),
+    entry('DVLA Band', vedDetails.DvlaBand, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.DvlaBand'),
+    entry('Standard Six Months', vedDetails?.VedRate?.Standard?.SixMonths, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.VedRate.Standard.SixMonths'),
+    entry('Standard Twelve Months', vedDetails?.VedRate?.Standard?.TwelveMonths, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.VedRate.Standard.TwelveMonths'),
+    entry('First Year Six Months', vedDetails?.VedRate?.FirstYear?.SixMonths, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.VedRate.FirstYear.SixMonths'),
+    entry('First Year Twelve Months', vedDetails?.VedRate?.FirstYear?.TwelveMonths, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.VedRate.FirstYear.TwelveMonths'),
+    entry('Premium Vehicle Six Months', vedDetails?.VedRate?.PremiumVehicle?.SixMonths, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.VedRate.PremiumVehicle.SixMonths'),
+    entry('Premium Vehicle Twelve Months', vedDetails?.VedRate?.PremiumVehicle?.TwelveMonths, 'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.VedRate.PremiumVehicle.TwelveMonths')
+  ].filter((pair, idx) => pair && (pair.value !== DASH || idx < 3)) as GridEntry[];
 
   if (vedEntries.length) {
     yPos = addSectionTitle(doc, 'Vehicle Excise Duty Details', yPos, primaryColor);
@@ -701,7 +735,7 @@ const renderModelDetails = (
     if (value && typeof value === 'object' && Object.keys(value).length > 0) {
       consumed.add(key);
       yPos = addSubSectionTitle(doc, label, yPos, primaryColor);
-      yPos = renderObjectContent(doc, value, yPos, primaryColor, 1);
+      yPos = renderObjectContent(doc, value, yPos, primaryColor, 1, `ModelDetails.${key}`);
     }
   });
 
@@ -710,7 +744,7 @@ const renderModelDetails = (
     .forEach(([key, value]) => {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         yPos = addSubSectionTitle(doc, formatLabel(key), yPos, primaryColor);
-        yPos = renderObjectContent(doc, value, yPos, primaryColor, 1);
+        yPos = renderObjectContent(doc, value, yPos, primaryColor, 1, `ModelDetails.${key}`);
       }
     });
 
@@ -722,11 +756,12 @@ const renderGenericSection = (
   title: string,
   data: any,
   yPos: number,
-  primaryColor: [number, number, number]
+  primaryColor: [number, number, number],
+  sectionPath?: string
 ): number => {
   if (!data || typeof data !== 'object') return yPos;
   yPos = addSectionTitle(doc, title, yPos, primaryColor);
-  return renderObjectContent(doc, data, yPos, primaryColor, 0);
+  return renderObjectContent(doc, data, yPos, primaryColor, 0, sectionPath);
 };
 
 const renderMileageSummary = (
@@ -1107,13 +1142,13 @@ export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buf
         yPos = renderModelDetails(doc, sectionData, yPos, palette.primary);
         break;
       case 'VehicleTaxDetails':
-        yPos = renderGenericSection(doc, section.title, sectionData, yPos, palette.primary);
+        yPos = renderGenericSection(doc, section.title, sectionData, yPos, palette.primary, section.key);
         break;
       case 'MotHistoryDetails':
         yPos = renderMotHistory(doc, sectionData, unified.vehicleData, results, yPos, palette);
         break;
       default:
-        yPos = renderGenericSection(doc, section.title, sectionData, yPos, palette.primary);
+        yPos = renderGenericSection(doc, section.title, sectionData, yPos, palette.primary, section.key);
         break;
     }
   }

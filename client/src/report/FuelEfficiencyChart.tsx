@@ -172,7 +172,8 @@ export const FuelEfficiencyChart: React.FC<FuelEfficiencyChartProps> = ({
         backgroundColor: '#f8fafc',
         borderRadius: '8px',
         border: '1px solid #e2e8f0',
-        marginBottom: '24px'
+        marginBottom: '24px',
+        overflow: 'visible'
       }}>
         {/* Summary Stats */}
         <div style={{

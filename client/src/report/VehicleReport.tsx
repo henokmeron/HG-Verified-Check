@@ -74,6 +74,7 @@ export const VehicleReport: React.FC<VehicleReportProps & { vehicleData?: any }>
       schema: R?.[k],
       data: P?.[k], // Will be undefined if no data, component will handle it
       id: k.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase(),
+      sectionKey: k
     }));
 
   // Use brand primary color or default professional blue
@@ -224,7 +225,13 @@ export const VehicleReport: React.FC<VehicleReportProps & { vehicleData?: any }>
             included={shouldShow}
             strategy={hideStrategy}
           >
-            <Section id={b.id} title={b.title} schema={b.schema || []} data={b.data} />
+            <Section
+              id={b.id}
+              title={b.title}
+              schema={b.schema || []}
+              data={b.data}
+              sectionPath={b.sectionKey}
+            />
           </SectionGate>
         );
       })}

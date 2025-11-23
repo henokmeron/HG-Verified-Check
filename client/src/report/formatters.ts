@@ -1,3 +1,5 @@
+import { formatReportValue } from '@shared/reportFormatting';
+
 export const isEmpty = (v: any) =>
   v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
 
@@ -124,7 +126,14 @@ function getUnitForField(label: string, value: any, type?: string): string {
   return '';
 }
 
-export function formatValue(v: any, t?: string, label?: string): string {
+export function formatValue(v: any, t?: string, label?: string, fieldPath?: string): string {
+  if (fieldPath) {
+    const sharedFormatted = formatReportValue(v, fieldPath, label);
+    if (sharedFormatted !== '—' || isEmpty(v)) {
+      return sharedFormatted;
+    }
+  }
+
   // Check for currency formatting FIRST (before converting to string)
   if (label) {
     const unit = getUnitForField(label, v, t);

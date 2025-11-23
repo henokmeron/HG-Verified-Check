@@ -98,8 +98,8 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
     return { text: 'UNKNOWN', passed: false };
   };
 
-  const getDefects = (test: MOTTest): Array<{ type: string; text: string }> => {
-    const defects: Array<{ type: string; text: string }> = [];
+const getFailures = (test: MOTTest): Array<{ type: string; text: string }> => {
+  const failures: Array<{ type: string; text: string }> = [];
     
     // Check AnnotationList for defects (Type === 'D' or 'DEFECT')
     if (Array.isArray(test.AnnotationList)) {
@@ -107,7 +107,7 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
         const type = annotation.Type || annotation.type || '';
         const text = annotation.Text || annotation.Description || annotation.text || annotation.description || '';
         if (type === 'D' || type === 'DEFECT' || type === 'Dangerous' || (text && !annotation.Type)) {
-          defects.push({ type: 'Defect', text });
+          failures.push({ type: 'Defect', text });
         }
       });
     }
@@ -116,11 +116,11 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
     if (Array.isArray(test.defects)) {
       test.defects.forEach((defect: any) => {
         const text = typeof defect === 'string' ? defect : (defect.text || defect.description || '');
-        if (text) defects.push({ type: 'Defect', text });
+        if (text) failures.push({ type: 'Defect', text });
       });
     }
     
-    return defects;
+    return failures;
   };
 
   const getAdvisories = (test: MOTTest): Array<{ type: string; text: string }> => {
@@ -293,8 +293,9 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
           const station = test.TestStation || test.TestStationName || test.station || 'Not available';
           const stationTown = test.TestStationTown || test.stationTown || '';
           const isRetest = test.IsRetest || test.retest || false;
-          const defects = getDefects(test);
+          const failures = getFailures(test);
           const advisories = getAdvisories(test);
+          const cardTitle = `Test ${index + 1} – ${testDate}`;
           
           return (
             <div 
@@ -311,45 +312,39 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
               }}
             >
               {/* Test Result Header */}
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                marginBottom: '16px',
-                flexWrap: 'wrap',
-                gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                  <div 
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '6px',
-                      fontWeight: '700',
-                      fontSize: '16px',
-                      color: 'white',
-                      backgroundColor: testResult.passed ? '#10b981' : '#ef4444',
-                      minWidth: '80px',
-                      textAlign: 'center'
-                    }}
-                  >
-                    {testResult.text}
-                  </div>
-                  {isRetest && (
-                    <span style={{
-                      padding: '4px 12px',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      backgroundColor: '#f59e0b',
-                      color: 'white'
-                    }}>
-                      RETEST
+              <div className="flex flex-col gap-2 mb-4">
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a' }}>{cardTitle}</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '999px',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        color: 'white',
+                        backgroundColor: testResult.passed ? '#0f9d58' : '#d93025'
+                      }}
+                    >
+                      {testResult.text}
                     </span>
-                  )}
+                    {isRetest && (
+                      <span
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: '999px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          backgroundColor: '#f59e0b',
+                          color: 'white'
+                        }}
+                      >
+                        Retest
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '500' }}>
-                  {testDate}
-                </div>
+                <div style={{ fontSize: '14px', color: '#475569', fontWeight: 600 }}>{testDate}</div>
               </div>
 
               {/* Test Details Grid */}
@@ -361,10 +356,10 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
               }}>
                 <div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', fontWeight: '500' }}>
-                    Test Date
+                    Mileage at Test
                   </div>
-                  <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a' }}>
-                    {testDate}
+                  <div style={{ fontSize: '15px', fontWeight: '700', color: '#0b5fff' }}>
+                    {mileage}
                   </div>
                 </div>
                 
@@ -379,15 +374,6 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
                 
                 <div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', fontWeight: '500' }}>
-                    Mileage at Test
-                  </div>
-                  <div style={{ fontSize: '15px', fontWeight: '700', color: '#0b5fff' }}>
-                    {mileage}
-                  </div>
-                </div>
-                
-                <div>
-                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', fontWeight: '500' }}>
                     Test Certificate Number
                   </div>
                   <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a', fontFamily: 'monospace' }}>
@@ -397,7 +383,7 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
                 
                 <div>
                   <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', fontWeight: '500' }}>
-                    Test Station
+                    Test Centre
                   </div>
                   <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a' }}>
                     {station}
@@ -406,8 +392,8 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
                 </div>
               </div>
 
-              {/* Defects */}
-              {defects.length > 0 && (
+              {/* Failures */}
+              {failures.length > 0 && (
                 <div style={{ marginTop: '16px', marginBottom: '12px' }}>
                   <div style={{ 
                     fontSize: '14px', 
@@ -419,14 +405,14 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
                     gap: '8px'
                   }}>
                     <span>⚠️</span>
-                    <span>Defects ({defects.length})</span>
+                    <span>Failures ({failures.length})</span>
                   </div>
                   <ul style={{ 
                     margin: 0, 
                     paddingLeft: '20px',
                     listStyle: 'disc'
                   }}>
-                    {defects.map((defect, idx) => (
+                    {failures.map((defect, idx) => (
                       <li key={idx} style={{ 
                         marginBottom: '6px', 
                         color: '#dc2626',
@@ -475,7 +461,7 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
               )}
 
               {/* No defects or advisories message */}
-              {defects.length === 0 && advisories.length === 0 && testResult.passed && (
+              {failures.length === 0 && advisories.length === 0 && testResult.passed && (
                 <div style={{ 
                   marginTop: '12px', 
                   padding: '12px', 
@@ -540,22 +526,34 @@ export const MotHistory: React.FC<{ items: any[] | undefined }> = ({ items }) =>
                 }
                 
                 return (
-                  <div key={idx} style={{
-                    padding: '12px',
-                    backgroundColor: 'white',
-                    borderRadius: '6px',
-                    border: '1px solid #e2e8f0'
-                  }}>
-                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>
-                      {testDate}
-                    </div>
-                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#0b5fff', marginBottom: '4px' }}>
-                      {mileage}
-                    </div>
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: 'white',
+                      borderRadius: '6px',
+                      border: '1px solid #e2e8f0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px'
+                    }}
+                  >
+                    <div style={{ fontSize: '12px', color: '#64748b' }}>{testDate}</div>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#0b5fff' }}>{mileage}</div>
                     {mileageChange !== 'First record' && (
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>
+                      <span
+                        style={{
+                          alignSelf: 'flex-start',
+                          padding: '2px 10px',
+                          borderRadius: '999px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          backgroundColor: '#e0f2fe',
+                          color: '#0369a1'
+                        }}
+                      >
                         {mileageChange}
-                      </div>
+                      </span>
                     )}
                   </div>
                 );

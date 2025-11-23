@@ -145,12 +145,13 @@ export const MileageGraph: React.FC<MileageGraphProps> = ({
         <h2>Mileage History Graph</h2>
       </header>
       
-      <div style={{
+        <div style={{
         padding: '24px',
         backgroundColor: '#f8fafc',
         borderRadius: '8px',
         border: '1px solid #e2e8f0',
-        marginBottom: '24px'
+          marginBottom: '24px',
+          overflow: 'visible'
       }}>
         {/* Summary Stats */}
         <div style={{
@@ -247,7 +248,8 @@ export const MileageGraph: React.FC<MileageGraphProps> = ({
             borderRadius: '6px',
             border: '1px solid #e2e8f0',
             padding: '20px',
-            boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              overflow: 'visible'
           }}>
             {/* Y-axis labels */}
             <div style={{
@@ -389,6 +391,62 @@ export const MileageGraph: React.FC<MileageGraphProps> = ({
               <div style={{ width: '8px', height: '8px', backgroundColor: '#3b82f6', borderRadius: '50%' }}></div>
               <span>Historical readings</span>
             </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '24px' }}>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600, color: '#0f172a' }}>
+            Detailed Mileage Records
+          </h3>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '12px'
+          }}>
+            {mileageRecords.map((record, index) => {
+              const previous = index > 0 ? mileageRecords[index - 1] : null;
+              const changeValue =
+                previous && record.mileage && previous.mileage
+                  ? record.mileage - previous.mileage
+                  : null;
+              return (
+                <div
+                  key={`${record.date}-${index}`}
+                  style={{
+                    backgroundColor: 'white',
+                    borderRadius: '6px',
+                    border: '1px solid #e2e8f0',
+                    padding: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}
+                >
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>
+                    {formatDate(record.date || record.testDate || '')}
+                  </div>
+                  <div style={{ fontSize: '16px', fontWeight: 700, color: '#0b5fff' }}>
+                    {record.mileage.toLocaleString('en-GB')} miles
+                  </div>
+                  {changeValue !== null && (
+                    <span
+                      style={{
+                        alignSelf: 'flex-start',
+                        padding: '2px 10px',
+                        borderRadius: '999px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        backgroundColor: changeValue >= 0 ? '#dcfce7' : '#fee2e2',
+                        color: changeValue >= 0 ? '#15803d' : '#b91c1c'
+                      }}
+                    >
+                      {changeValue >= 0 ? '+' : ''}
+                      {changeValue.toLocaleString('en-GB')} miles
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

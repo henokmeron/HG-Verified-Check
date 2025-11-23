@@ -3,6 +3,7 @@ import { VehicleReport } from '@/report/VehicleReport';
 import { VidicheckSchema } from '@/report/types';
 import PDFDownloadButton from './PDFDownloadButton';
 import '@/report/report.css';
+import { buildUnifiedReportData } from '@shared/unifiedReportData';
 
 // Load the schema - in production this would come from the API
 import schemaData from '@/data/vidcheck-package-schema.json';
@@ -107,6 +108,20 @@ export default function UnifiedReportDisplay({
     'Mileage Check Details': true         // MileageCheckDetails - Mileage history and anomalies
   };
 
+  const resolvedRegistration =
+    vehicleData?.registration ||
+    cleanedReportRaw?.Results?.VehicleDetails?.VehicleIdentification?.Vrm ||
+    cleanedReportRaw?.Vrm ||
+    'UNKNOWN';
+
+  const unified = buildUnifiedReportData({
+    registration: resolvedRegistration,
+    lookupId,
+    vehicleData,
+    reportRaw: cleanedReportRaw,
+    isPremium
+  });
+
   return (
     <div className="unified-report-container">
       {/* Download Button */}
@@ -131,10 +146,10 @@ export default function UnifiedReportDisplay({
           primary: '#0b5fff',
           accent: '#0ea5e9'
         }}
-        dateOfCheck={reportRaw?.dateOfCheck || reportRaw?.checkTimestamp}
-        reference={reportRaw?.reportReference || reportRaw?.Reference || 'N/A'}
-        registration={vehicleData?.registration || reportRaw?.Results?.VehicleDetails?.VehicleIdentification?.Vrm || reportRaw?.Vrm || ''}
-        vehicleData={vehicleData} // Pass vehicleData for fuel efficiency chart
+        dateOfCheck={unified.context.dateOfCheck}
+        reference={unified.context.reference}
+        registration={unified.context.registration}
+        vehicleData={unified.vehicleData} // Pass vehicleData for fuel efficiency chart
       />
     </div>
   );

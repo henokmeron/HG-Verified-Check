@@ -30,7 +30,10 @@ const serverFiles = [
   'server/reporting/format.ts',
   'server/reportSchema/helpers.ts',
   'server/email/gmailService.ts',
-  'shared/schema.ts'
+  'shared/schema.ts',
+  'shared/unifiedReportData.ts',
+  'shared/reportConfig.ts',
+  'shared/reportFormatting.ts'
 ];
 
 const outDir = 'dist/server';
