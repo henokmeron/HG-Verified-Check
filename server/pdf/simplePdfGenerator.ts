@@ -1,14 +1,15 @@
 import type { UnifiedReportData } from './unifiedReportData';
 
 type JsPDFConstructor = typeof import('jspdf').jsPDF;
-type AutoTableFn = (...args: any[]) => any;
 
 let cachedJsPDF: JsPDFConstructor | null = null;
-let cachedAutoTable: AutoTableFn | null = null;
 
-const resolveExport = <T = any>(label: string, candidates: Array<T | undefined>): T | null => {
+const PAGE_TOP = 20;
+const PAGE_BOTTOM = 275;
+
+const resolveExport = <T = any>(candidates: Array<T | undefined>): T | null => {
   for (const candidate of candidates) {
-    if (typeof candidate === 'function' || typeof candidate === 'object' && candidate) {
+    if (candidate && (typeof candidate === 'function' || typeof candidate === 'object')) {
       return candidate as T;
     }
   }
@@ -19,7 +20,7 @@ async function loadJsPDFConstructor(): Promise<JsPDFConstructor> {
   if (cachedJsPDF) return cachedJsPDF;
 
   const mod: any = await import('jspdf');
-  const ctor = resolveExport<JsPDFConstructor>('jsPDF', [
+  const ctor = resolveExport<JsPDFConstructor>([
     mod?.jsPDF,
     mod?.default?.jsPDF,
     mod?.default,
@@ -40,300 +41,449 @@ async function loadJsPDFConstructor(): Promise<JsPDFConstructor> {
   return ctor;
 }
 
-async function loadAutoTable(): Promise<AutoTableFn> {
-  if (cachedAutoTable) return cachedAutoTable;
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}T?/;
 
-  const mod: any = await import('jspdf-autotable');
-  const fn = resolveExport<AutoTableFn>('autoTable', [mod?.default, mod]);
+const formatLabel = (raw: string): string => {
+  if (!raw) return '';
+  return raw
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, (ch) => ch.toUpperCase());
+};
 
-  if (typeof fn !== 'function') {
-    console.error(
-      'Failed to resolve jspdf-autotable export. Module keys:',
-      Object.keys(mod || {}),
-      'default keys:',
-      Object.keys(mod?.default || {})
-    );
-    throw new Error('Failed to load jspdf-autotable plugin');
+const formatDateString = (value: string): string => {
+  if (!value) return 'N/A';
+  try {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+    return parsed.toLocaleDateString('en-GB');
+  } catch {
+    return value;
   }
+};
 
-  cachedAutoTable = fn;
-  return fn;
-}
+const formatArrayValue = (arr: any[]): string => {
+  if (!arr || arr.length === 0) return 'None';
+  const flattened = arr.filter((item) => item !== null && item !== undefined);
+  if (flattened.length === 0) return 'None';
+  if (flattened.every((item) => ['string', 'number', 'boolean'].includes(typeof item))) {
+    return flattened.map((item) => formatValue(item)).join(', ');
+  }
+  return `${flattened.length} item(s)`;
+};
 
-// Helper to format values for display
 function formatValue(value: any): string {
   if (value === null || value === undefined) return 'N/A';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'object' && !Array.isArray(value)) {
-    // For nested objects, return a summary or skip
-    return '—';
+  if (typeof value === 'number') return value.toLocaleString();
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return 'N/A';
+    if (ISO_DATE_REGEX.test(trimmed)) {
+      return formatDateString(trimmed);
+    }
+    return trimmed;
   }
   if (Array.isArray(value)) {
-    if (value.length === 0) return 'None';
-    return value.length.toString() + ' item(s)';
+    return formatArrayValue(value);
+  }
+  if (value instanceof Date) {
+    return value.toLocaleDateString('en-GB');
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return 'N/A';
+    return `${keys.length} field(s)`;
   }
   return String(value);
 }
 
-// Helper to extract all key-value pairs from an object recursively
-function extractKeyValuePairs(obj: any, prefix = '', maxDepth = 3, currentDepth = 0): Array<[string, string]> {
-  const pairs: Array<[string, string]> = [];
-  
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-    return pairs;
+const ensurePageSpace = (doc: any, yPos: number, required = 0): number => {
+  if (yPos + required > PAGE_BOTTOM) {
+    doc.addPage();
+    return PAGE_TOP;
   }
-  
-  // Prevent infinite recursion
-  if (currentDepth >= maxDepth) {
-    return pairs;
-  }
-  
-  for (const [key, value] of Object.entries(obj)) {
-    // Skip internal/system fields
-    if (key === 'RequestInformation' || key === 'ResponseInformation') {
-      continue;
-    }
-    
-    // Format label - use human-readable format
-    const formattedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).trim();
-    const label = prefix ? `${prefix} - ${formattedKey}` : formattedKey;
-    
-    if (value === null || value === undefined) {
-      continue; // Skip null/undefined
-    } else if (Array.isArray(value)) {
-      if (value.length === 0) {
-        continue;
-      }
-      // For arrays of primitives, show values
-      if (value.length > 0 && (typeof value[0] === 'string' || typeof value[0] === 'number' || typeof value[0] === 'boolean')) {
-        pairs.push([label, value.join(', ')]);
-      } else {
-        // For arrays of objects, show count
-        pairs.push([label, `${value.length} item(s)`]);
-      }
-    } else if (typeof value === 'object') {
-      // For nested objects, recursively extract fields
-      const nested = extractKeyValuePairs(value, label, maxDepth, currentDepth + 1);
-      if (nested.length > 0) {
-        pairs.push(...nested);
-      } else {
-        // If nested object has no extractable fields, show as object
-        pairs.push([label, '—']);
-      }
-    } else {
-      pairs.push([label, formatValue(value)]);
-    }
-  }
-  
-  return pairs;
-}
+  return yPos;
+};
 
-// Helper to add a section header
-function addSectionHeader(
+const addSectionTitle = (
   doc: any,
   title: string,
   yPos: number,
   primaryColor: [number, number, number]
-): number {
-  if (yPos > 250) {
-    doc.addPage();
-    yPos = 20;
-  }
-  
-  doc.setFontSize(16);
+): number => {
+  yPos = ensurePageSpace(doc, yPos, 20);
+  doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...primaryColor);
   doc.text(title, 20, yPos);
-  yPos += 2;
   doc.setDrawColor(...primaryColor);
-  doc.setLineWidth(0.5);
-  doc.line(20, yPos, 190, yPos);
-  yPos += 8;
-  
-  return yPos;
+  doc.setLineWidth(0.6);
+  doc.line(20, yPos + 2, 190, yPos + 2);
+  return yPos + 10;
+};
+
+const addSubSectionTitle = (
+  doc: any,
+  title: string,
+  yPos: number,
+  primaryColor: [number, number, number]
+): number => {
+  yPos = ensurePageSpace(doc, yPos, 14);
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...primaryColor);
+  doc.text(title, 25, yPos);
+  doc.setDrawColor(...primaryColor);
+  doc.setLineWidth(0.3);
+  doc.line(25, yPos + 1, 185, yPos + 1);
+  return yPos + 6;
+};
+
+type GridEntry = { label: string; value: string };
+
+interface GridOptions {
+  startX?: number;
+  columnWidth?: number;
+  columnGap?: number;
 }
 
-// Helper to render a data section
-function renderDataSection(
+const renderKeyValueGrid = (
   doc: any,
-  autoTable: AutoTableFn,
+  entries: GridEntry[],
+  yPos: number,
+  options: GridOptions = {}
+): number => {
+  if (!entries.length) return yPos;
+
+  const startX = options.startX ?? 25;
+  const columnWidth = options.columnWidth ?? 75;
+  const columnGap = options.columnGap ?? 15;
+  const columns = 2;
+
+  let index = 0;
+  while (index < entries.length) {
+    const row = entries.slice(index, index + columns);
+    const rowMetrics = row.map((entry) => {
+      const labelLines = doc.splitTextToSize(entry.label, columnWidth);
+      const valueLines = doc.splitTextToSize(entry.value, columnWidth);
+      const labelHeight = labelLines.length * 4.5;
+      const valueHeight = valueLines.length * 5;
+      return {
+        labelLines,
+        valueLines,
+        blockHeight: labelHeight + valueHeight + 6
+      };
+    });
+
+    const rowHeight = rowMetrics.reduce((max, current) => Math.max(max, current.blockHeight), 12);
+    yPos = ensurePageSpace(doc, yPos, rowHeight + 4);
+
+    row.forEach((entry, idx) => {
+      const metric = rowMetrics[idx];
+      const x = startX + idx * (columnWidth + columnGap);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      doc.text(metric.labelLines, x, yPos, { maxWidth: columnWidth });
+
+      const valueY = yPos + metric.labelLines.length * 4.5 + 2;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.text(metric.valueLines, x, valueY, { maxWidth: columnWidth });
+    });
+
+    yPos += rowHeight + 4;
+    index += columns;
+  }
+
+  return yPos;
+};
+
+const renderObjectContent = (
+  doc: any,
   data: any,
   yPos: number,
   primaryColor: [number, number, number],
-  textColor: [number, number, number]
-): number {
-  if (!data || typeof data !== 'object') {
-    return yPos;
-  }
-  
-  const pairs = extractKeyValuePairs(data);
-  if (pairs.length === 0) {
-    return yPos;
-  }
-  
-  // Check if we need a new page
-  if (yPos > 250) {
-    doc.addPage();
-    yPos = 20;
-  }
-  
-  autoTable(doc, {
-    startY: yPos,
-    head: [],
-    body: pairs,
-    theme: 'plain',
-    styles: { fontSize: 9, cellPadding: 2 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 70 },
-      1: { cellWidth: 110 }
-    },
-    margin: { left: 20, right: 20 }
-  });
-  
-  return (doc as any).lastAutoTable.finalY + 10;
-}
+  depth = 0
+): number => {
+  if (!data || typeof data !== 'object') return yPos;
 
-// Helper to render MOT History with full details
-function renderMOTHistory(
-  doc: any,
-  autoTable: AutoTableFn,
-  motTests: any[],
-  yPos: number,
-  primaryColor: [number, number, number],
-  textColor: [number, number, number],
-  grayColor: [number, number, number]
-): number {
-  if (!motTests || motTests.length === 0) {
-    return yPos;
+  const directEntries: GridEntry[] = [];
+  const nestedEntries: Array<{ title: string; value: any }> = [];
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === null || value === undefined) continue;
+
+    if (Array.isArray(value)) {
+      directEntries.push({ label: formatLabel(key), value: formatArrayValue(value) });
+      continue;
+    }
+
+    if (typeof value === 'object') {
+      if (Object.keys(value).length === 0) continue;
+      nestedEntries.push({ title: formatLabel(key), value });
+      continue;
+    }
+
+    directEntries.push({ label: formatLabel(key), value: formatValue(value) });
   }
-  
-  yPos = addSectionHeader(doc, 'MOT History', yPos, primaryColor);
-  
+
+  if (directEntries.length) {
+    const startX = depth > 0 ? 30 : 25;
+    yPos = renderKeyValueGrid(doc, directEntries, yPos, { startX });
+  }
+
+  for (const nested of nestedEntries) {
+    yPos = addSubSectionTitle(doc, nested.title, yPos, primaryColor);
+    yPos = renderObjectContent(doc, nested.value, yPos, primaryColor, depth + 1);
+  }
+
+  return yPos;
+};
+
+const renderVehicleDetails = (
+  doc: any,
+  data: any,
+  yPos: number,
+  primaryColor: [number, number, number]
+): number => {
+  if (!data || typeof data !== 'object') return yPos;
+  yPos = addSectionTitle(doc, 'Vehicle Details', yPos, primaryColor);
+
+  const sections = [
+    { key: 'VehicleIdentification', label: 'Vehicle Identification' },
+    { key: 'VehicleStatus', label: 'Vehicle Status' },
+    { key: 'VehicleHistory', label: 'Vehicle History' },
+    { key: 'DvlaTechnicalDetails', label: 'DVLA Technical Details' }
+  ];
+
+  const consumed = new Set<string>();
+
+  sections.forEach((section) => {
+    const content = data?.[section.key];
+    if (content && typeof content === 'object' && Object.keys(content).length > 0) {
+      consumed.add(section.key);
+      yPos = addSubSectionTitle(doc, section.label, yPos, primaryColor);
+      yPos = renderObjectContent(doc, content, yPos, primaryColor, 1);
+    }
+  });
+
+  const remaining = Object.entries(data)
+    .filter(([key]) => !consumed.has(key));
+
+  if (remaining.length) {
+    yPos = addSubSectionTitle(doc, 'Additional Details', yPos, primaryColor);
+    const directEntries = remaining
+      .filter(([, value]) => typeof value !== 'object' || Array.isArray(value))
+      .map(([key, value]) => ({ label: formatLabel(key), value: formatValue(value) }));
+    if (directEntries.length) {
+      yPos = renderKeyValueGrid(doc, directEntries, yPos, { startX: 25 });
+    }
+
+    remaining.forEach(([key, value]) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        yPos = addSubSectionTitle(doc, formatLabel(key), yPos, primaryColor);
+        yPos = renderObjectContent(doc, value, yPos, primaryColor, 1);
+      }
+    });
+  }
+
+  return yPos;
+};
+
+const renderModelDetails = (
+  doc: any,
+  data: any,
+  yPos: number,
+  primaryColor: [number, number, number]
+): number => {
+  if (!data || typeof data !== 'object') return yPos;
+  yPos = addSectionTitle(doc, 'Model Details', yPos, primaryColor);
+
+  const directEntries: GridEntry[] = [];
+  const nestedOrder = [
+    { key: 'ModelIdentification', label: 'Model Identification' },
+    { key: 'Classification', label: 'Classification' },
+    { key: 'Body', label: 'Body' },
+    { key: 'Dimensions', label: 'Dimensions' },
+    { key: 'Weights', label: 'Weights' },
+    { key: 'Powertrain', label: 'Powertrain' },
+    { key: 'Safety', label: 'Safety' },
+    { key: 'Emissions', label: 'Emissions' },
+    { key: 'Performance', label: 'Performance' },
+    { key: 'AdditionalInformation', label: 'Additional Information' }
+  ];
+
+  const consumed = new Set<string>();
+
+  Object.entries(data).forEach(([key, value]) => {
+    if (value === null || value === undefined) return;
+    if (typeof value === 'object' && !Array.isArray(value)) return;
+    directEntries.push({ label: formatLabel(key), value: formatValue(value) });
+  });
+
+  if (directEntries.length) {
+    yPos = renderKeyValueGrid(doc, directEntries, yPos, { startX: 25 });
+  }
+
+  nestedOrder.forEach(({ key, label }) => {
+    const value = data?.[key];
+    if (value && typeof value === 'object' && Object.keys(value).length > 0) {
+      consumed.add(key);
+      yPos = addSubSectionTitle(doc, label, yPos, primaryColor);
+      yPos = renderObjectContent(doc, value, yPos, primaryColor, 1);
+    }
+  });
+
+  Object.entries(data)
+    .filter(([key]) => !consumed.has(key))
+    .forEach(([key, value]) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        yPos = addSubSectionTitle(doc, formatLabel(key), yPos, primaryColor);
+        yPos = renderObjectContent(doc, value, yPos, primaryColor, 1);
+      }
+    });
+
+  return yPos;
+};
+
+const renderGenericSection = (
+  doc: any,
+  title: string,
+  data: any,
+  yPos: number,
+  primaryColor: [number, number, number]
+): number => {
+  if (!data || typeof data !== 'object') return yPos;
+  yPos = addSectionTitle(doc, title, yPos, primaryColor);
+  return renderObjectContent(doc, data, yPos, primaryColor, 0);
+};
+
+const renderMotHistory = (
+  doc: any,
+  motData: any,
+  yPos: number,
+  palette: {
+    primary: [number, number, number];
+    text: [number, number, number];
+    gray: [number, number, number];
+    advisory: [number, number, number];
+    failure: [number, number, number];
+  }
+): number => {
+  if (!motData) return yPos;
+
+  let motTests: any[] = [];
+  if (Array.isArray(motData)) {
+    motTests = motData;
+  } else if (Array.isArray(motData?.MotTestDetailsList)) {
+    motTests = motData.MotTestDetailsList;
+  } else if (Array.isArray(motData?.MotTests)) {
+    motTests = motData.MotTests;
+  }
+
+  if (!motTests.length) return yPos;
+
+  yPos = addSectionTitle(doc, 'MOT History', yPos, palette.primary);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...textColor);
+  doc.setTextColor(...palette.text);
   doc.text(`${motTests.length} MOT test(s) found`, 20, yPos);
   yPos += 8;
-  
-  // Render ALL MOT tests (not just 5)
-  for (let i = 0; i < motTests.length; i++) {
-    const test = motTests[i];
-    
-    // Check if we need a new page
-    if (yPos > 250) {
-      doc.addPage();
-      yPos = 20;
-    }
-    
-    // Test header
-    doc.setFillColor(240, 240, 240);
-    doc.rect(20, yPos - 4, 170, 8, 'F');
+
+  motTests.forEach((test, index) => {
+    yPos = ensurePageSpace(doc, yPos, 32);
+
+    doc.setFillColor(245, 247, 255);
+    doc.roundedRect(20, yPos - 3, 170, 9, 2, 2, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...textColor);
-    doc.text(`Test ${i + 1} - Date: ${test.TestDate || 'N/A'}`, 25, yPos);
-    
-    // Result badge
-    const isPass = test.TestResult === 'Pass' || test.TestResult === 'PASS';
-    doc.setFillColor(isPass ? 16 : 239, isPass ? 185 : 68, isPass ? 129 : 68);
-    doc.roundedRect(150, yPos - 4, 35, 6, 1, 1, 'F');
+    doc.setFontSize(11);
+    doc.setTextColor(...palette.text);
+    doc.text(`Test ${index + 1} – ${formatValue(test.TestDate)}`, 25, yPos + 3);
+
+    const isPass = (test.TestResult || '').toString().toLowerCase() === 'pass';
+    doc.setFillColor(...(isPass ? [16, 185, 129] : [239, 68, 68]));
+    doc.roundedRect(150, yPos - 3, 35, 9, 2, 2, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
-    doc.text(test.TestResult || 'N/A', 167, yPos - 1, { align: 'center' });
-    
-    yPos += 8;
-    doc.setTextColor(...textColor);
-    doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    
-    // Test details
-    const testInfo: Array<[string, string]> = [];
-    if (test.OdometerReading !== undefined) {
-      testInfo.push(['Mileage', `${test.OdometerReading.toLocaleString()} miles`]);
+    doc.text((test.TestResult || 'N/A').toString().toUpperCase(), 167, yPos + 3, { align: 'center' });
+
+    yPos += 12;
+
+    const infoEntries: GridEntry[] = [];
+    if (test.OdometerReading !== undefined && test.OdometerReading !== null) {
+      const mileage = Number(test.OdometerReading);
+      infoEntries.push({
+        label: 'Mileage',
+        value: Number.isNaN(mileage) ? formatValue(test.OdometerReading) : `${mileage.toLocaleString()} miles`
+      });
     }
     if (test.ExpiryDate) {
-      testInfo.push(['Expiry Date', test.ExpiryDate]);
+      infoEntries.push({ label: 'Expiry Date', value: formatValue(test.ExpiryDate) });
     }
     if (test.TestNumber) {
-      testInfo.push(['Test Number', test.TestNumber]);
+      infoEntries.push({ label: 'Test Number', value: formatValue(test.TestNumber) });
     }
     if (test.TestLocation) {
-      testInfo.push(['Test Location', test.TestLocation]);
+      infoEntries.push({ label: 'Test Location', value: formatValue(test.TestLocation) });
     }
     if (test.TestClass) {
-      testInfo.push(['Test Class', test.TestClass]);
+      infoEntries.push({ label: 'Test Class', value: formatValue(test.TestClass) });
     }
-    
-    if (testInfo.length > 0) {
-      autoTable(doc, {
-        startY: yPos,
-        head: [],
-        body: testInfo,
-        theme: 'plain',
-        styles: { fontSize: 9, cellPadding: 1.5 },
-        columnStyles: {
-          0: { fontStyle: 'bold', cellWidth: 50 },
-          1: { cellWidth: 120 }
-        },
-        margin: { left: 25, right: 25 }
-      });
-      
-      yPos = (doc as any).lastAutoTable.finalY + 2;
+
+    if (infoEntries.length) {
+      yPos = renderKeyValueGrid(doc, infoEntries, yPos, { startX: 25, columnWidth: 70, columnGap: 20 });
     }
-    
-    // Advisories
-    if (test.AdvisoryNoticeList && test.AdvisoryNoticeList.length > 0) {
-      doc.setFontSize(9);
-      doc.setTextColor(217, 119, 6);
+
+    const renderList = (items: any[], title: string, color: [number, number, number]) => {
+      if (!items || !items.length) return yPos;
+      yPos = ensurePageSpace(doc, yPos, items.length * 5 + 8);
       doc.setFont('helvetica', 'bold');
-      doc.text(`Advisories (${test.AdvisoryNoticeList.length}):`, 25, yPos);
+      doc.setFontSize(9);
+      doc.setTextColor(...color);
+      doc.text(`${title} (${items.length}):`, 25, yPos);
       yPos += 5;
       doc.setFont('helvetica', 'normal');
-      
-      test.AdvisoryNoticeList.forEach((adv: any) => {
-        const text = adv.AdvisoryNotice || adv.toString();
+      doc.setTextColor(...palette.gray);
+      items.forEach((item) => {
+        const text = item?.AdvisoryNotice || item?.FailureReason || formatValue(item);
         const lines = doc.splitTextToSize(text, 160);
-        doc.setTextColor(...grayColor);
         doc.text(lines, 30, yPos);
         yPos += lines.length * 4;
       });
+      return yPos + 2;
+    };
+
+    if (test.AdvisoryNoticeList?.length) {
+      yPos = renderList(test.AdvisoryNoticeList, 'Advisories', palette.advisory);
     }
-    
-    // Failures
-    if (test.FailureReasonList && test.FailureReasonList.length > 0) {
-      doc.setFontSize(9);
-      doc.setTextColor(220, 38, 38);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Failures (${test.FailureReasonList.length}):`, 25, yPos);
-      yPos += 5;
-      doc.setFont('helvetica', 'normal');
-      
-      test.FailureReasonList.forEach((fail: any) => {
-        const text = fail.FailureReason || fail.toString();
-        const lines = doc.splitTextToSize(text, 160);
-        doc.setTextColor(220, 38, 38);
-        doc.text(lines, 30, yPos);
-        yPos += lines.length * 4;
-      });
+
+    if (test.FailureReasonList?.length) {
+      yPos = renderList(test.FailureReasonList, 'Failures', palette.failure);
     }
-    
+
     yPos += 6;
-  }
-  
+  });
+
   return yPos;
-}
+};
 
 /**
  * Comprehensive PDF generator that works on Vercel serverless
- * Uses jsPDF and includes ALL sections matching the website report
+ * Uses jsPDF and renders sections using the same structure as the website
  */
 export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buffer> {
   console.log('📄 Generating comprehensive PDF with jsPDF (serverless-compatible)');
 
-  // Dynamic imports to avoid ESM issues in serverless
   const jsPDF = await loadJsPDFConstructor();
-  const autoTable = await loadAutoTable();
 
-  const { context, vehicleData = {}, reportRaw = {} } = unified;
+  const { context, reportRaw = {} } = unified;
   const { registration, dateOfCheck, reference, isPremium } = context;
   const resolvedReference = reference || registration;
   const resolvedDate = new Date(dateOfCheck);
@@ -345,50 +495,43 @@ export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buf
     format: 'a4'
   });
 
-  // Colors
-  const primaryColor: [number, number, number] = [11, 95, 255];
-  const textColor: [number, number, number] = [0, 0, 0];
-  const grayColor: [number, number, number] = [128, 128, 128];
-  
-  let yPos = 20;
-  
-  // Header with blue background
-  doc.setFillColor(...primaryColor);
+  const palette = {
+    primary: [11, 95, 255] as [number, number, number],
+    text: [0, 0, 0] as [number, number, number],
+    gray: [120, 120, 120] as [number, number, number],
+    advisory: [217, 119, 6] as [number, number, number],
+    failure: [220, 38, 38] as [number, number, number]
+  };
+
+  // Header
+  doc.setFillColor(...palette.primary);
   doc.rect(0, 0, 210, 40, 'F');
-  
-  // Title
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.text('Vehicle Check Report', 105, 15, { align: 'center' });
-  
+  doc.setFontSize(24);
+  doc.text('Vehicle Check Report', 105, 14, { align: 'center' });
   doc.setFontSize(14);
   doc.text('HG Verified Vehicle Check', 105, 25, { align: 'center' });
-  
-  // Registration in yellow box
+
   doc.setFillColor(255, 215, 0);
   doc.roundedRect(70, 30, 70, 12, 2, 2, 'F');
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text(registration.toUpperCase(), 105, 37, { align: 'center' });
-  
-  yPos = 50;
-  
-  // Report metadata
-  doc.setTextColor(...textColor);
-  doc.setFontSize(10);
+  doc.text(registration.toUpperCase(), 105, 39, { align: 'center' });
+
+  let yPos = 52;
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(...palette.text);
   doc.text(`Date of Check: ${checkDate.toLocaleDateString('en-GB')}`, 20, yPos);
   yPos += 5;
   doc.text(`Reference: ${resolvedReference}`, 20, yPos);
   yPos += 5;
   doc.text(`Report Type: ${isPremium ? 'Comprehensive' : 'Basic'}`, 20, yPos);
-  yPos += 10;
+  yPos += 12;
 
   const results = reportRaw?.Results || {};
-  
-  // Define section order matching the website
+
   const sectionOrder = [
     { key: 'VehicleDetails', title: 'Vehicle Details' },
     { key: 'ModelDetails', title: 'Model Details' },
@@ -402,91 +545,52 @@ export async function generateSimplePDF(unified: UnifiedReportData): Promise<Buf
     { key: 'TyreDetails', title: 'Tyre Details' },
     { key: 'VehicleImageDetails', title: 'Vehicle Images' },
     { key: 'MileageCheckDetails', title: 'Mileage Check Details' },
-    { key: 'MotHistoryDetails', title: 'MOT History' },
+    { key: 'MotHistoryDetails', title: 'MOT History' }
   ];
-  
-  // Free check sections (always shown)
-  const freeSections = ['VehicleDetails', 'ModelDetails', 'VehicleTaxDetails', 'MotHistoryDetails'];
-  
-  // Render sections in order
+
+  const freeSections = new Set([
+    'VehicleDetails',
+    'ModelDetails',
+    'VehicleTaxDetails',
+    'MotHistoryDetails'
+  ]);
+
   for (const section of sectionOrder) {
-    const sectionData = results[section.key];
-    
-    // Skip if no data
+    const sectionData = results?.[section.key];
     if (!sectionData) continue;
-    
-    // Skip premium-only sections if not premium
-    if (!isPremium && !freeSections.includes(section.key)) {
-      continue;
-    }
-    
-    // Special handling for VehicleDetails (has nested sections)
-    if (section.key === 'VehicleDetails') {
-      yPos = addSectionHeader(doc, section.title, yPos, primaryColor);
-      
-      // Extract VehicleDetails data
-      const vehicleDetails = sectionData;
-      const vehicleId = vehicleDetails.VehicleIdentification || {};
-      const vehicleStatus = vehicleDetails.VehicleStatus || {};
-      const vehicleHistory = vehicleDetails.VehicleHistory || {};
-      const dvlaTechnical = vehicleDetails.DvlaTechnicalDetails || {};
-      
-      // Vehicle Identification
-      if (Object.keys(vehicleId).length > 0) {
-        yPos = renderDataSection(doc, autoTable, vehicleId, yPos, primaryColor, textColor);
-      }
-      
-      // Vehicle Status
-      if (Object.keys(vehicleStatus).length > 0) {
-        yPos = addSectionHeader(doc, 'Vehicle Status', yPos, primaryColor);
-        yPos = renderDataSection(doc, autoTable, vehicleStatus, yPos, primaryColor, textColor);
-      }
-      
-      // Vehicle History
-      if (Object.keys(vehicleHistory).length > 0) {
-        yPos = addSectionHeader(doc, 'Vehicle History', yPos, primaryColor);
-        yPos = renderDataSection(doc, autoTable, vehicleHistory, yPos, primaryColor, textColor);
-      }
-      
-      // DVLA Technical Details
-      if (Object.keys(dvlaTechnical).length > 0) {
-        yPos = addSectionHeader(doc, 'DVLA Technical Details', yPos, primaryColor);
-        yPos = renderDataSection(doc, autoTable, dvlaTechnical, yPos, primaryColor, textColor);
-      }
-    } else if (section.key === 'MotHistoryDetails') {
-      // MOT History gets special rendering with full test details
-      const motHistory = sectionData;
-      const motTests = motHistory?.MotTestDetailsList || [];
-      if (motTests.length > 0) {
-        yPos = renderMOTHistory(doc, autoTable, motTests, yPos, primaryColor, textColor, grayColor);
-      }
-    } else {
-      // Standard section rendering
-      yPos = addSectionHeader(doc, section.title, yPos, primaryColor);
-      yPos = renderDataSection(doc, autoTable, sectionData, yPos, primaryColor, textColor);
+    if (!isPremium && !freeSections.has(section.key)) continue;
+
+    switch (section.key) {
+      case 'VehicleDetails':
+        yPos = renderVehicleDetails(doc, sectionData, yPos, palette.primary);
+        break;
+      case 'ModelDetails':
+        yPos = renderModelDetails(doc, sectionData, yPos, palette.primary);
+        break;
+      case 'VehicleTaxDetails':
+        yPos = renderGenericSection(doc, section.title, sectionData, yPos, palette.primary);
+        break;
+      case 'MotHistoryDetails':
+        yPos = renderMotHistory(doc, sectionData, yPos, palette);
+        break;
+      default:
+        yPos = renderGenericSection(doc, section.title, sectionData, yPos, palette.primary);
+        break;
     }
   }
-  
-  // Footer on last page
-  if (yPos > 250) {
-    doc.addPage();
-    yPos = 20;
-  }
-  
-  yPos = 270;
+
+  yPos = ensurePageSpace(doc, yPos, 40);
   doc.setFillColor(245, 245, 245);
-  doc.rect(0, yPos, 210, 27, 'F');
-  
-  doc.setTextColor(...grayColor);
-  doc.setFontSize(9);
+  doc.rect(0, 270, 210, 27, 'F');
   doc.setFont('helvetica', 'normal');
-  doc.text('This report was generated by HG Verified Vehicle Check', 105, yPos + 8, { align: 'center' });
-  doc.text(`Report Reference: ${resolvedReference}`, 105, yPos + 13, { align: 'center' });
-  doc.text(`Generated on: ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB')}`, 105, yPos + 18, { align: 'center' });
-  
-  // Convert to buffer
+  doc.setFontSize(9);
+  doc.setTextColor(...palette.gray);
+  doc.text('This report was generated by HG Verified Vehicle Check', 105, 278, { align: 'center' });
+  doc.text(`Report Reference: ${resolvedReference}`, 105, 283, { align: 'center' });
+  doc.text(`Generated on: ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB')}`, 105, 288, { align: 'center' });
+
   const pdfBuffer = doc.output('arraybuffer') as ArrayBuffer;
-  console.log('✅ Comprehensive PDF generated successfully with jsPDF, size:', pdfBuffer.length, 'bytes');
-  
+  console.log('✅ Comprehensive PDF generated successfully with jsPDF, size:', pdfBuffer.byteLength, 'bytes');
+
   return Buffer.from(pdfBuffer);
 }
