@@ -77,7 +77,8 @@ const createFieldEntry = (path: string, fallbackLabel: string, value: any): Grid
   }
 
   const label = getLabelForPath(path, fallbackLabel);
-  return { label: `${label}:`, value: formatted };
+  const valueColor = resolveStatusColor(path, formatted);
+  return { label: `${label}:`, value: formatted, valueColor };
 };
 
 const toNumber = (value: any): number | null => {
@@ -263,6 +264,9 @@ const extractMotTests = (motData: any): any[] => {
   if (!motData) return [];
   if (Array.isArray(motData)) return motData;
   if (Array.isArray(motData.MotTestDetailsList)) return motData.MotTestDetailsList;
+  if (Array.isArray(motData.MotTestHistory)) return motData.MotTestHistory;
+  if (Array.isArray(motData.MotTestHistoryList?.Tests)) return motData.MotTestHistoryList.Tests;
+  if (Array.isArray(motData.MotTests?.MotTest)) return motData.MotTests.MotTest;
   if (Array.isArray(motData.MotTests)) return motData.MotTests;
   if (Array.isArray(motData.Tests)) return motData.Tests;
   if (Array.isArray(motData.TestHistory)) return motData.TestHistory;
@@ -275,8 +279,24 @@ const categorizeAnnotations = (items: any[] = []): { advisories: string[]; failu
 
   items.forEach((item) => {
     if (!item) return;
-    const type = (item.Type || item.Severity || '').toString().toUpperCase();
-    const text = item.Text || item.AdvisoryNotice || item.FailureReason || item.Description;
+    const type = (
+      item.Type ||
+      item.Result ||
+      item.Outcome ||
+      item.Severity ||
+      item.Category ||
+      ''
+    )
+      .toString()
+      .toUpperCase();
+    const text =
+      item.Text ||
+      item.Comment ||
+      item.Advisory ||
+      item.AdvisoryNotice ||
+      item.FailureReason ||
+      item.Description ||
+      item.Notes;
     if (!text) return;
     if (type.includes('FAIL') || type.includes('PRS') || type.includes('DANGEROUS')) {
       failures.push(text);
@@ -305,18 +325,14 @@ const normalizeMotTests = (motData: any): NormalizedMotTest[] => {
       const expiryDate = formatDate(test.ExpiryDate);
       const testNumber = textOrDash(test.TestNumber || test.CertificateNumber);
       const location = textOrDash(test.TestLocation || test.StationName || test.TestStationName);
-      const annotationBuckets = categorizeAnnotations(
-        (test.AnnotationList as any[]) || (test.AdvisoryNoticeList as any[]) || (test.Failures as any[])
-      );
-      const extraAdvisories = Array.isArray(test.AdvisoryNoticeList)
-        ? test.AdvisoryNoticeList.map((item: any) => item.AdvisoryNotice || item.Text).filter(Boolean)
-        : [];
-      const extraFailures = Array.isArray(test.FailureReasonList)
-        ? test.FailureReasonList.map((item: any) => item.FailureReason || item.Text).filter(Boolean)
-        : [];
-
-      const advisories = [...annotationBuckets.advisories, ...extraAdvisories];
-      const failures = [...annotationBuckets.failures, ...extraFailures];
+      const annotationBuckets = categorizeAnnotations([
+        ...(Array.isArray(test.AnnotationList) ? test.AnnotationList : []),
+        ...(Array.isArray(test.AdvisoryNoticeList) ? test.AdvisoryNoticeList : []),
+        ...(Array.isArray(test.FailureReasonList) ? test.FailureReasonList : []),
+        ...(Array.isArray(test.RfrAndComments) ? test.RfrAndComments : []),
+        ...(Array.isArray(test.Failures) ? test.Failures : []),
+        ...(Array.isArray(test.Advisories) ? test.Advisories : [])
+      ]);
 
       return {
         index,
@@ -330,8 +346,8 @@ const normalizeMotTests = (motData: any): NormalizedMotTest[] => {
         resultLabel: isRetest ? `${resultLabel} (Retest)` : resultLabel,
         passed,
         isRetest,
-        advisories,
-        failures
+        advisories: annotationBuckets.advisories,
+        failures: annotationBuckets.failures
       };
     })
     .sort((a, b) => {
@@ -383,7 +399,38 @@ const addSubSectionTitle = (
   return yPos + 6;
 };
 
-type GridEntry = { label: string; value: string };
+type GridEntry = {
+  label: string;
+  value: string;
+  valueColor?: [number, number, number];
+};
+
+const GOOD_COLOR: [number, number, number] = [16, 185, 129];
+const BAD_COLOR: [number, number, number] = [220, 38, 38];
+const MUTED_TEXT: [number, number, number] = [90, 90, 90];
+
+const CRITICAL_STATUS_RULES: Record<string, { positive: string[] }> = {
+  'VehicleDetails.VehicleStatus.IsImported': { positive: ['no'] },
+  'VehicleDetails.VehicleStatus.IsImportedFromNi': { positive: ['no'] },
+  'VehicleDetails.VehicleStatus.IsImportedFromOutsideEu': { positive: ['no'] },
+  'VehicleDetails.VehicleStatus.CertificateOfDestructionIssued': { positive: ['no'] },
+  'VehicleDetails.VehicleStatus.IsExported': { positive: ['no'] },
+  'VehicleDetails.VehicleStatus.IsScrapped': { positive: ['no'] },
+  'VehicleDetails.VehicleStatus.IsUnscrapped': { positive: ['yes'] },
+  'VehicleDetails.VehicleStatus.IsUnscrappedVehicle': { positive: ['yes'] },
+  'VehicleTaxDetails.TaxIsCurrentlyValid': { positive: ['yes'] },
+  'VehicleTaxDetails.TaxStatus': { positive: ['taxed'] },
+  'VehicleTaxDetails.MotStatus': { positive: ['valid'] },
+  'VehicleDetails.VehicleStatus.VehicleExciseDutyDetails.DvlaBand': { positive: ['f', 'e', 'd', 'c', 'b', 'a'] }
+};
+
+const resolveStatusColor = (path: string, formattedValue: string): [number, number, number] | undefined => {
+  const rule = CRITICAL_STATUS_RULES[path];
+  if (!rule) return undefined;
+  const normalized = formattedValue?.toString().trim().toLowerCase();
+  if (!normalized) return undefined;
+  return rule.positive.includes(normalized) ? GOOD_COLOR : BAD_COLOR;
+};
 
 interface GridOptions {
   startX?: number;
@@ -415,14 +462,15 @@ const renderKeyValueGrid = (
       return {
         labelLines,
         valueLines,
-        blockHeight: labelHeight + valueHeight + 6
+        blockHeight: labelHeight + valueHeight + 6,
+        valueColor: entry.valueColor
       };
     });
 
     const rowHeight = rowMetrics.reduce((max, current) => Math.max(max, current.blockHeight), 12);
     yPos = ensurePageSpace(doc, yPos, rowHeight + 4);
 
-    row.forEach((_, idx) => {
+    row.forEach((entry, idx) => {
       const metric = rowMetrics[idx];
       const x = startX + idx * (columnWidth + columnGap);
 
@@ -434,7 +482,9 @@ const renderKeyValueGrid = (
       const valueY = yPos + metric.labelLines.length * 4.5 + 2;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(11);
+      doc.setTextColor(...(metric.valueColor ?? MUTED_TEXT));
       doc.text(metric.valueLines, x, valueY, { maxWidth: columnWidth });
+      doc.setTextColor(0, 0, 0);
     });
 
     yPos += rowHeight + 4;
@@ -595,61 +645,103 @@ const renderVehicleDetails = (
     yPos = renderKeyValueGrid(doc, colorEntries, yPos);
   }
 
-  const renderTimeline = (title: string, items: any[], formatter: (item: any, index: number) => string[]): number => {
+  const renderTimelineCards = (
+    title: string,
+    items: any[],
+    formatter: (item: any, index: number) => GridEntry[]
+  ): number => {
     if (!items.length) return yPos;
-    yPos = ensurePageSpace(doc, yPos, items.length * 10 + 10);
+
+    yPos = ensurePageSpace(doc, yPos, 14);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(...primaryColor);
     doc.text(title, 25, yPos);
     yPos += 6;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(60, 60, 60);
+
     items.forEach((item: any, idx) => {
-      const lines = formatter(item, idx);
-      lines.forEach((line: string, lineIdx: number) => {
-        doc.text(line, 30, yPos + lineIdx * 4);
+      const entries = formatter(item, idx);
+      if (!entries.length) return;
+      const cardHeight = entries.length * 6 + 6;
+      yPos = ensurePageSpace(doc, yPos, cardHeight + 6);
+
+      doc.setDrawColor(224, 229, 244);
+      doc.setFillColor(249, 250, 255);
+      doc.roundedRect(25, yPos - 3, 160, cardHeight + 6, 3, 3, 'F');
+      doc.roundedRect(25, yPos - 3, 160, cardHeight + 6, 3, 3);
+
+      let lineY = yPos + 3;
+      entries.forEach((entry) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(...primaryColor);
+        doc.text(entry.label, 30, lineY);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...(entry.valueColor ?? MUTED_TEXT));
+        doc.text(entry.value, 90, lineY);
+        lineY += 6;
       });
-      yPos += lines.length * 4 + 2;
+
+      yPos += cardHeight + 6;
     });
     return yPos + 2;
   };
 
   if (keeperList.length) {
-    yPos = renderTimeline('Keeper Change History', keeperList, (item, index) => {
-      return [
-        `Keeper ${index + 1}: ${textOrDash(item.NumberOfPreviousKeepers)}`,
-        `Start Date: ${formatDate(item.KeeperStartDate)}`,
-        `Previous Disposal Date: ${formatDate(item.PreviousKeeperDisposalDate)}`
-      ];
-    });
+    yPos = renderTimelineCards('Keeper Change History', keeperList, (item, index) => [
+      { label: `Keeper ${index + 1}`, value: textOrDash(item.NumberOfPreviousKeepers) },
+      { label: 'Start Date', value: formatDate(item.KeeperStartDate) },
+      { label: 'Previous Disposal Date', value: formatDate(item.PreviousKeeperDisposalDate) }
+    ]);
   }
 
   if (plateList.length) {
-    yPos = renderTimeline('Plate Change History', plateList, (item) => {
-      return [
-        `Previous Plate: ${textOrDash(item.PreviousPlate)}`,
-        `Date: ${formatDate(item.PlateChangeDate)}`
-      ];
-    });
+    yPos = renderTimelineCards('Plate Change History', plateList, (item) => [
+      { label: 'Previous Plate', value: textOrDash(item.PreviousPlate) },
+      { label: 'Date', value: formatDate(item.PlateChangeDate) }
+    ]);
   }
 
   if (v5cList.length) {
-    yPos = renderTimeline('V5C Certificate Issue Dates', v5cList, (item) => {
-      return [`Issue Date: ${formatDate(item.IssueDate)}`];
-    });
+    yPos = renderTimelineCards('V5C Certificate Issue Dates', v5cList, (item) => [
+      { label: 'Issue Date', value: formatDate(item.IssueDate) }
+    ]);
   }
 
   const tech = data?.DvlaTechnicalDetails || {};
+  const engineCapacityValue = tech.EngineCapacityCc ?? tech.EngineCapacity;
+  const engineCapacityPath = tech.EngineCapacityCc
+    ? 'VehicleDetails.DvlaTechnicalDetails.EngineCapacityCc'
+    : 'VehicleDetails.DvlaTechnicalDetails.EngineCapacity';
+  const maxNetPowerValue = tech.MaxNetPowerKw ?? tech.MaxNetPower;
+  const maxNetPowerPath = tech.MaxNetPowerKw
+    ? 'VehicleDetails.DvlaTechnicalDetails.MaxNetPowerKw'
+    : 'VehicleDetails.DvlaTechnicalDetails.MaxNetPower';
+  const massInServiceValue = tech.MassInServiceKg ?? tech.MassInService;
+  const massInServicePath = tech.MassInServiceKg
+    ? 'VehicleDetails.DvlaTechnicalDetails.MassInServiceKg'
+    : 'VehicleDetails.DvlaTechnicalDetails.MassInService';
+
   const techEntries: GridEntry[] = [
     entry('Number Of Seats', tech.NumberOfSeats, 'VehicleDetails.DvlaTechnicalDetails.NumberOfSeats'),
-    entry('Engine Capacity', tech.EngineCapacityCc || tech.EngineCapacity, 'VehicleDetails.DvlaTechnicalDetails.EngineCapacityCc'),
-    entry('Max Net Power', tech.MaxNetPowerKw || tech.MaxNetPower, 'VehicleDetails.DvlaTechnicalDetails.MaxNetPower'),
-    entry('Mass In Service', tech.MassInServiceKg || tech.MassInService, 'VehicleDetails.DvlaTechnicalDetails.MassInService'),
+    entry('Engine Capacity', engineCapacityValue, engineCapacityPath),
+    entry('Max Net Power', maxNetPowerValue, maxNetPowerPath),
+    entry('Mass In Service', massInServiceValue, massInServicePath),
     entry('Power To Weight Ratio', tech.PowerToWeightRatio, 'VehicleDetails.DvlaTechnicalDetails.PowerToWeightRatio'),
-    entry('Max Permissible Braked Trailer Mass', tech.MaxPermissibleBrakedTrailerMassKg, 'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleBrakedTrailerMassKg'),
-    entry('Max Permissible Unbraked Trailer Mass', tech.MaxPermissibleUnbrakedTrailerMassKg, 'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleUnbrakedTrailerMassKg')
+    entry(
+      'Max Permissible Braked Trailer Mass',
+      tech.MaxPermissibleBrakedTrailerMassKg ?? tech.MaxPermissibleBrakedTrailerMass,
+      tech.MaxPermissibleBrakedTrailerMassKg
+        ? 'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleBrakedTrailerMassKg'
+        : 'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleBrakedTrailerMass'
+    ),
+    entry(
+      'Max Permissible Unbraked Trailer Mass',
+      tech.MaxPermissibleUnbrakedTrailerMassKg ?? tech.MaxPermissibleUnbrakedTrailerMass,
+      tech.MaxPermissibleUnbrakedTrailerMassKg
+        ? 'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleUnbrakedTrailerMassKg'
+        : 'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleUnbrakedTrailerMass'
+    )
   ].filter(Boolean) as GridEntry[];
 
   if (techEntries.length) {
@@ -812,7 +904,7 @@ const renderMileageSummary = (
   yPos += 8;
 
   // Line chart - increased height to match old report
-  const chartHeight = 70;
+  const chartHeight = 80;
   const chartWidth = 160;
   const chartStartX = 25;
   const chartStartY = yPos + chartHeight;
@@ -822,6 +914,11 @@ const renderMileageSummary = (
 
   doc.setDrawColor(200, 200, 200);
   doc.rect(chartStartX, yPos, chartWidth, chartHeight);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...primaryColor);
+  doc.text(`${maxMileage.toLocaleString('en-GB')} mi`, chartStartX - 2, yPos + 4, { align: 'right' });
+  doc.text(`${minMileage.toLocaleString('en-GB')} mi`, chartStartX - 2, chartStartY, { align: 'right' });
 
   doc.setDrawColor(...primaryColor);
   doc.setLineWidth(0.6);
@@ -846,6 +943,22 @@ const renderMileageSummary = (
     doc.circle(x, y, 1.5, 'F');
   });
 
+  const firstYear = mileageRecords[0].date?.getFullYear();
+  const lastYear = mileageRecords[mileageRecords.length - 1].date?.getFullYear();
+  const middleYear =
+    mileageRecords[Math.floor(mileageRecords.length / 2)].date?.getFullYear();
+  doc.setFontSize(8);
+  doc.setTextColor(...MUTED_TEXT);
+  if (typeof firstYear === 'number') {
+    doc.text(firstYear.toString(), chartStartX, chartStartY + 6, { align: 'center' });
+  }
+  if (typeof middleYear === 'number' && middleYear !== firstYear && middleYear !== lastYear) {
+    doc.text(middleYear.toString(), chartStartX + chartWidth / 2, chartStartY + 6, { align: 'center' });
+  }
+  if (typeof lastYear === 'number') {
+    doc.text(lastYear.toString(), chartStartX + chartWidth, chartStartY + 6, { align: 'center' });
+  }
+
   yPos += chartHeight + 10;
 
   // Mileage table
@@ -857,35 +970,45 @@ const renderMileageSummary = (
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(60, 60, 60);
+  const recordBoxWidth = 160;
+  const recordBoxHeight = 16;
+  const changeBoxWidth = 60;
+
   mileageRecords.forEach((record, idx) => {
-    yPos = ensurePageSpace(doc, yPos, 12);
-    
-    // Date and mileage line
-    doc.text(`${record.dateLabel} • ${record.mileageLabel}`, 30, yPos);
-    yPos += 5;
-    
-    // Change since last record in a box
-    const change =
+    yPos = ensurePageSpace(doc, yPos, recordBoxHeight + 6);
+    doc.setDrawColor(225, 228, 240);
+    doc.roundedRect(25, yPos, recordBoxWidth, recordBoxHeight, 3, 3);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...primaryColor);
+    doc.text(record.dateLabel, 30, yPos + 6);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...MUTED_TEXT);
+    doc.text(record.mileageLabel, 30, yPos + 12);
+
+    const changeValue =
       idx === 0 || record.mileage === null || mileageRecords[idx - 1].mileage === null
+        ? null
+        : record.mileage - (mileageRecords[idx - 1].mileage ?? 0);
+    const changeText =
+      changeValue === null
         ? '—'
-        : `+${(record.mileage - (mileageRecords[idx - 1].mileage ?? 0)).toLocaleString('en-GB')} miles`;
-    
-    const changeText = `Change since last record: ${change}`;
-    const textWidth = doc.getTextWidth(changeText);
-    const boxPadding = 2;
-    const boxHeight = 6;
-    
-    // Draw the box
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.3);
-    doc.rect(30, yPos - 3.5, textWidth + boxPadding * 2, boxHeight);
-    
-    // Draw the text inside the box
+        : `${changeValue >= 0 ? '+' : ''}${changeValue.toLocaleString('en-GB')} miles`;
+
+    const changeX = 25 + recordBoxWidth - changeBoxWidth - 6;
+    const changeY = yPos + 2;
+    doc.setFillColor(240, 244, 255);
+    doc.setDrawColor(205, 216, 240);
+    doc.roundedRect(changeX, changeY, changeBoxWidth + 6, recordBoxHeight - 4, 3, 3, 'F');
+    doc.roundedRect(changeX, changeY, changeBoxWidth + 6, recordBoxHeight - 4, 3, 3);
+
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.text(changeText, 30 + boxPadding, yPos);
-    doc.setFontSize(10);
-    
-    yPos += 6;
+    doc.setTextColor(...primaryColor);
+    doc.text(changeText, changeX + (changeBoxWidth + 6) / 2, yPos + 11, { align: 'center' });
+
+    yPos += recordBoxHeight + 6;
   });
 
   return yPos + 4;
@@ -1001,123 +1124,125 @@ const renderMotHistory = (
   doc.setFontSize(10);
   doc.setTextColor(...palette.text);
   doc.text(`Based on ${nonRetest.length} tests (excluding retests)`, 25, yPos + 6);
+  doc.setTextColor(...GOOD_COLOR);
   doc.text(`Passed: ${passCount}`, 120, yPos);
+  doc.setTextColor(...BAD_COLOR);
   doc.text(`Failed: ${failCount}`, 120, yPos + 6);
+  doc.setTextColor(...palette.text);
 
   yPos += 15;
 
-  motTests.forEach((test, index) => {
-    // Estimate card height more accurately
-    const estimatedHeight = 50 + (test.advisories.length * 5) + (test.failures.length * 5);
-    yPos = ensurePageSpace(doc, yPos, Math.min(estimatedHeight, 60));
+  type PreparedCard = {
+    test: NormalizedMotTest;
+    index: number;
+    detailLines: { label: string; lines: string[]; height: number }[];
+    advisoryBlocks: string[][];
+    failureBlocks: string[][];
+    cardHeight: number;
+  };
 
-    // Card header with test number, date, and result
+  const preparedCards: PreparedCard[] = motTests.map((test, index) => {
+    const makeLine = (label: string, value?: string): PreparedCard['detailLines'][number] | null => {
+      if (!value || value === DASH) return null;
+      const lines = doc.splitTextToSize(value, 105);
+      return { label, lines, height: lines.length * 4 + 2 };
+    };
+
+    const detailLines = [
+      makeLine('Mileage At Test', test.mileageLabel),
+      makeLine('Expiry Date', test.expiryDate),
+      makeLine('Test Centre', test.location),
+      makeLine('Certificate', test.testNumber),
+      test.isRetest ? makeLine('Retest', 'Yes') : null
+    ].filter(Boolean) as PreparedCard['detailLines'];
+
+    const advisoryBlocks = test.advisories.map((text) => doc.splitTextToSize(`• ${text}`, 150));
+    const failureBlocks = test.failures.map((text) => doc.splitTextToSize(`• ${text}`, 150));
+
+    const detailHeight = detailLines.reduce((sum, line) => sum + line.height + 2, 0);
+    const advisoryHeight = advisoryBlocks.length
+      ? 8 + advisoryBlocks.reduce((sum, block) => sum + block.length * 4 + 2, 0)
+      : 0;
+    const failureHeight = failureBlocks.length
+      ? 8 + failureBlocks.reduce((sum, block) => sum + block.length * 4 + 2, 0)
+      : 0;
+
+    const cardHeight = 20 + detailHeight + advisoryHeight + failureHeight + 8;
+
+    return { test, index, detailLines, advisoryBlocks, failureBlocks, cardHeight };
+  });
+
+  preparedCards.forEach((card) => {
+    yPos = ensurePageSpace(doc, yPos, card.cardHeight + 6);
+    const cardTop = yPos;
+
+    doc.setFillColor(248, 249, 255);
+    doc.setDrawColor(225, 229, 244);
+    doc.roundedRect(20, cardTop - 4, 170, card.cardHeight + 8, 4, 4, 'F');
+    doc.roundedRect(20, cardTop - 4, 170, card.cardHeight + 8, 4, 4);
+
+    let innerY = cardTop + 4;
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.setTextColor(40, 40, 40);
-    doc.text(`Test ${index + 1} – ${test.dateLabel}`, 25, yPos);
+    doc.setTextColor(...palette.text);
+    doc.text(`Test ${card.index + 1} – ${card.test.dateLabel}`, 26, innerY);
 
-    // Result badge
-    const resultColor = test.passed ? [16, 185, 129] : [220, 38, 38];
-    doc.setFillColor(...resultColor);
-    doc.roundedRect(155, yPos - 4, 30, 8, 2, 2, 'F');
+    const badgeColor = card.test.passed ? GOOD_COLOR : BAD_COLOR;
+    doc.setFillColor(...badgeColor);
+    doc.roundedRect(155, innerY - 6, 30, 10, 3, 3, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.text(test.resultLabel, 170, yPos + 1, { align: 'center' });
-    
-    yPos += 8;
+    doc.setFontSize(9.5);
+    doc.text(card.test.resultLabel, 170, innerY, { align: 'center' });
 
-    // Test details
+    innerY += 10;
+    doc.setTextColor(...palette.text);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
-    doc.setTextColor(60, 60, 60);
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('Mileage At Test:', 25, yPos);
-    doc.setFont('helvetica', 'normal');
-    doc.text(test.mileageLabel, 70, yPos);
-    yPos += 5;
 
-    if (test.expiryDate && test.expiryDate !== DASH) {
+    card.detailLines.forEach((line) => {
       doc.setFont('helvetica', 'bold');
-      doc.text('Expiry Date:', 25, yPos);
+      doc.setTextColor(...palette.primary);
+      doc.text(`${line.label}:`, 26, innerY);
       doc.setFont('helvetica', 'normal');
-      doc.text(test.expiryDate, 70, yPos);
-      yPos += 5;
-    }
+      doc.setTextColor(...palette.text);
+      doc.text(line.lines, 70, innerY, { maxWidth: 110 });
+      innerY += line.height;
+    });
 
-    if (test.location && test.location !== DASH) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Test Centre:', 25, yPos);
-      doc.setFont('helvetica', 'normal');
-      const locationLines = doc.splitTextToSize(test.location, 115);
-      doc.text(locationLines, 70, yPos);
-      yPos += locationLines.length * 5;
-    }
-
-    if (test.testNumber && test.testNumber !== DASH) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Certificate:', 25, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text(test.testNumber, 70, yPos);
-      yPos += 5;
-    }
-
-    if (test.isRetest && !test.resultLabel.includes('Retest')) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('Is Retest:', 25, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Yes', 70, yPos);
-      yPos += 5;
-    }
-
-    yPos += 2;
-
-    // Advisories
-    if (test.advisories.length > 0) {
-      yPos = ensurePageSpace(doc, yPos, 10);
+    if (card.advisoryBlocks.length) {
+      innerY = ensurePageSpace(doc, innerY, 8);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(...palette.advisory);
-      doc.text(`Advisories (${test.advisories.length})`, 25, yPos);
-      yPos += 5;
-      
+      doc.text(`Advisories (${card.advisoryBlocks.length})`, 26, innerY);
+      innerY += 5;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(...palette.gray);
-      test.advisories.forEach((advisory) => {
-        yPos = ensurePageSpace(doc, yPos, 6);
-        const lines = doc.splitTextToSize(`• ${advisory}`, 155);
-        doc.text(lines, 27, yPos);
-        yPos += lines.length * 4;
+      card.advisoryBlocks.forEach((block) => {
+        doc.text(block, 28, innerY, { maxWidth: 160 });
+        innerY += block.length * 4 + 1;
       });
-      yPos += 2;
     }
 
-    // Failures
-    if (test.failures.length > 0) {
-      yPos = ensurePageSpace(doc, yPos, 10);
+    if (card.failureBlocks.length) {
+      innerY = ensurePageSpace(doc, innerY, 8);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(...palette.failure);
-      doc.text(`Failures (${test.failures.length})`, 25, yPos);
-      yPos += 5;
-      
+      doc.text(`Failures (${card.failureBlocks.length})`, 26, innerY);
+      innerY += 5;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(...palette.gray);
-      test.failures.forEach((failure) => {
-        yPos = ensurePageSpace(doc, yPos, 6);
-        const lines = doc.splitTextToSize(`• ${failure}`, 155);
-        doc.text(lines, 27, yPos);
-        yPos += lines.length * 4;
+      card.failureBlocks.forEach((block) => {
+        doc.text(block, 28, innerY, { maxWidth: 160 });
+        innerY += block.length * 4 + 1;
       });
-      yPos += 2;
     }
 
-    // Spacing between test cards
-    yPos += 6;
+    yPos = Math.max(innerY + 6, cardTop + card.cardHeight + 4);
   });
 
   yPos = renderMileageSummary(doc, motTests, yPos, palette.primary);
