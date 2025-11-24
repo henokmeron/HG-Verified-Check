@@ -166,7 +166,8 @@ const LABEL_OVERRIDES: Record<string, string> = {
   KeeperStartDate: 'Keeper Start Date',
   PreviousKeeperDisposalDate: 'Previous Keeper Disposal Date',
   IssueDate: 'Issue Date',
-  Co2Emissions: 'CO₂ Emissions',
+  Co2Emissions: 'CO2 Emissions',
+  ManufacturerCo2: 'Manufacturer CO2',
   CombinedMpg: 'Combined MPG',
   UrbanMpg: 'Urban MPG',
   ExtraUrbanMpg: 'Extra Urban MPG',
@@ -660,7 +661,7 @@ const renderVehicleDetails = (
   const taxEntries: GridEntry[] = [
     entry('VRM', vehicleTaxDetails.Vrm, 'VehicleTaxDetails.Vrm'),
     entry('Make', vehicleTaxDetails.Make, 'VehicleTaxDetails.Make'),
-    entry('CO₂ Emissions', vehicleTaxDetails.Co2Emissions, 'VehicleTaxDetails.Co2Emissions'),
+    entry('CO2 Emissions', vehicleTaxDetails.Co2Emissions, 'VehicleTaxDetails.Co2Emissions'),
     entry('MOT Status', vehicleTaxDetails.MotStatus, 'VehicleTaxDetails.MotStatus'),
     entry('Year Of Manufacture', vehicleTaxDetails.YearOfManufacture, 'VehicleTaxDetails.YearOfManufacture'),
     entry('Tax Due Date', vehicleTaxDetails.TaxDueDate, 'VehicleTaxDetails.TaxDueDate'),
@@ -723,6 +724,8 @@ const renderModelDetails = (
   Object.entries(data).forEach(([key, value]) => {
     if (value === null || value === undefined) return;
     if (typeof value === 'object' && !Array.isArray(value)) return;
+    const currentPath = `ModelDetails.${key}`;
+    if (shouldHideField(currentPath) || shouldHideField(key)) return;
     directEntries.push({ label: `${formatLabel(key)}:`, value: formatGenericValue(key, value) });
   });
 
@@ -806,11 +809,11 @@ const renderMileageSummary = (
   doc.setFontSize(11);
   doc.setTextColor(...primaryColor);
   doc.text('Mileage Over Time', 25, yPos);
-  yPos += 6;
+  yPos += 8;
 
-  // Simple line chart
-  const chartHeight = 45;
-  const chartWidth = 150;
+  // Line chart - increased height to match old report
+  const chartHeight = 70;
+  const chartWidth = 160;
   const chartStartX = 25;
   const chartStartY = yPos + chartHeight;
   const minMileage = Math.min(...mileageRecords.map((r) => r.mileage ?? 0));
@@ -945,7 +948,7 @@ const renderFuelEfficiencyPanel = (
     { label: 'Urban MPG:', value: urbanMpg ? `${urbanMpg.toFixed(1)} mpg` : DASH },
     { label: 'Extra Urban MPG:', value: extraUrbanMpg ? `${extraUrbanMpg.toFixed(1)} mpg` : DASH },
     { label: 'Combined L/100km:', value: combinedL ? `${combinedL.toFixed(1)} L/100km` : DASH },
-    { label: 'CO₂ Emissions:', value: co2 !== null ? `${co2.toFixed(0)} g/km` : DASH },
+    { label: 'CO2 Emissions:', value: co2 !== null ? `${co2.toFixed(0)} g/km` : DASH },
     { label: 'Fuel Type:', value: fuelType }
   ];
 
@@ -1004,57 +1007,117 @@ const renderMotHistory = (
   yPos += 15;
 
   motTests.forEach((test, index) => {
-    yPos = ensurePageSpace(doc, yPos, 40);
-    doc.setFillColor(248, 249, 255);
-    doc.roundedRect(20, yPos - 6, 170, 40, 2, 2, 'F');
+    // Estimate card height more accurately
+    const estimatedHeight = 50 + (test.advisories.length * 5) + (test.failures.length * 5);
+    yPos = ensurePageSpace(doc, yPos, Math.min(estimatedHeight, 60));
 
+    // Card header with test number, date, and result
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(...palette.primary);
+    doc.setFontSize(12);
+    doc.setTextColor(40, 40, 40);
     doc.text(`Test ${index + 1} – ${test.dateLabel}`, 25, yPos);
 
+    // Result badge
     const resultColor = test.passed ? [16, 185, 129] : [220, 38, 38];
     doc.setFillColor(...resultColor);
-    doc.roundedRect(150, yPos - 4, 35, 10, 2, 2, 'F');
+    doc.roundedRect(155, yPos - 4, 30, 8, 2, 2, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(9);
-    doc.text(test.resultLabel, 167, yPos + 2, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.text(test.resultLabel, 170, yPos + 1, { align: 'center' });
+    
+    yPos += 8;
 
-    yPos += 10;
-    const infoEntries: GridEntry[] = [
-      { label: 'Mileage At Test:', value: test.mileageLabel },
-      { label: 'Expiry Date:', value: test.expiryDate },
-      { label: 'Certificate:', value: test.testNumber },
-      { label: 'Test Station:', value: test.location }
-    ].filter((entry) => entry.value && entry.value !== DASH);
+    // Test details
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('Mileage At Test:', 25, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.text(test.mileageLabel, 70, yPos);
+    yPos += 5;
 
-    if (infoEntries.length) {
-      yPos = renderKeyValueGrid(doc, infoEntries, yPos, { startX: 25, columnWidth: 75, columnGap: 20 });
+    if (test.expiryDate && test.expiryDate !== DASH) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Expiry Date:', 25, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text(test.expiryDate, 70, yPos);
+      yPos += 5;
     }
 
-    const renderAnnotationList = (title: string, items: string[], color: [number, number, number]) => {
-      if (!items.length) return;
-      yPos = ensurePageSpace(doc, yPos, items.length * 5 + 6);
+    if (test.location && test.location !== DASH) {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(...color);
-      doc.text(`${title} (${items.length})`, 25, yPos);
-      yPos += 5;
+      doc.text('Test Centre:', 25, yPos);
       doc.setFont('helvetica', 'normal');
+      const locationLines = doc.splitTextToSize(test.location, 115);
+      doc.text(locationLines, 70, yPos);
+      yPos += locationLines.length * 5;
+    }
+
+    if (test.testNumber && test.testNumber !== DASH) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Certificate:', 25, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text(test.testNumber, 70, yPos);
+      yPos += 5;
+    }
+
+    if (test.isRetest && !test.resultLabel.includes('Retest')) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Is Retest:', 25, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Yes', 70, yPos);
+      yPos += 5;
+    }
+
+    yPos += 2;
+
+    // Advisories
+    if (test.advisories.length > 0) {
+      yPos = ensurePageSpace(doc, yPos, 10);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(...palette.advisory);
+      doc.text(`Advisories (${test.advisories.length})`, 25, yPos);
+      yPos += 5;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
       doc.setTextColor(...palette.gray);
-      items.forEach((text) => {
-        const bulletText = `• ${text}`;
-        const lines = doc.splitTextToSize(bulletText, 150);
-        doc.text(lines, 30, yPos);
+      test.advisories.forEach((advisory) => {
+        yPos = ensurePageSpace(doc, yPos, 6);
+        const lines = doc.splitTextToSize(`• ${advisory}`, 155);
+        doc.text(lines, 27, yPos);
         yPos += lines.length * 4;
       });
-      yPos += 3;
-    };
+      yPos += 2;
+    }
 
-    renderAnnotationList('Advisories', test.advisories, palette.advisory);
-    renderAnnotationList('Failures', test.failures, palette.failure);
+    // Failures
+    if (test.failures.length > 0) {
+      yPos = ensurePageSpace(doc, yPos, 10);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(...palette.failure);
+      doc.text(`Failures (${test.failures.length})`, 25, yPos);
+      yPos += 5;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...palette.gray);
+      test.failures.forEach((failure) => {
+        yPos = ensurePageSpace(doc, yPos, 6);
+        const lines = doc.splitTextToSize(`• ${failure}`, 155);
+        doc.text(lines, 27, yPos);
+        yPos += lines.length * 4;
+      });
+      yPos += 2;
+    }
 
-    yPos += 4;
+    // Spacing between test cards
+    yPos += 6;
   });
 
   yPos = renderMileageSummary(doc, motTests, yPos, palette.primary);

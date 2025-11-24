@@ -62,6 +62,17 @@ export const FIELD_CONFIG: FieldConfigMap = {
   'VehicleTaxDetails.Standard.TwelveMonths': { formatter: 'currency' },
   'VehicleTaxDetails.FirstYear.SixMonths': { formatter: 'currency' },
   'VehicleTaxDetails.FirstYear.TwelveMonths': { formatter: 'currency' },
+  // DVLA Technical Details
+  'VehicleDetails.DvlaTechnicalDetails.EngineCapacity': { unit: 'cc' },
+  'VehicleDetails.DvlaTechnicalDetails.EngineCapacityCc': { unit: 'cc' },
+  'VehicleDetails.DvlaTechnicalDetails.MaxNetPower': { unit: 'kw' },
+  'VehicleDetails.DvlaTechnicalDetails.MaxNetPowerKw': { unit: 'kw' },
+  'VehicleDetails.DvlaTechnicalDetails.MassInService': { unit: 'kg' },
+  'VehicleDetails.DvlaTechnicalDetails.MassInServiceKg': { unit: 'kg' },
+  'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleBrakedTrailerMass': { unit: 'kg' },
+  'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleBrakedTrailerMassKg': { unit: 'kg' },
+  'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleUnbrakedTrailerMass': { unit: 'kg' },
+  'VehicleDetails.DvlaTechnicalDetails.MaxPermissibleUnbrakedTrailerMassKg': { unit: 'kg' },
   // Model dimensions
   'ModelDetails.Dimensions.HeightMm': { unit: 'mm' },
   'ModelDetails.Dimensions.LengthMm': { unit: 'mm' },
