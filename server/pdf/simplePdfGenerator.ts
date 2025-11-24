@@ -416,8 +416,8 @@ const CRITICAL_STATUS_RULES: Record<string, { positive: string[] }> = {
   'VehicleDetails.VehicleStatus.CertificateOfDestructionIssued': { positive: ['no'] },
   'VehicleDetails.VehicleStatus.IsExported': { positive: ['no'] },
   'VehicleDetails.VehicleStatus.IsScrapped': { positive: ['no'] },
-  'VehicleDetails.VehicleStatus.IsUnscrapped': { positive: ['yes'] },
-  'VehicleDetails.VehicleStatus.IsUnscrappedVehicle': { positive: ['yes'] },
+  'VehicleDetails.VehicleStatus.IsUnscrapped': { positive: ['no'] },
+  'VehicleDetails.VehicleStatus.IsUnscrappedVehicle': { positive: ['no'] },
   'VehicleTaxDetails.TaxIsCurrentlyValid': { positive: ['yes'] },
   'VehicleTaxDetails.TaxStatus': { positive: ['taxed'] },
   'VehicleTaxDetails.MotStatus': { positive: ['valid'] },
@@ -1140,22 +1140,24 @@ const renderMotHistory = (
   // Draw colored boxes for Passed and Failed counts
   const passText = `Passed: ${passCount}`;
   const failText = `Failed: ${failCount}`;
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
   const passWidth = doc.getTextWidth(passText) + 6;
   const failWidth = doc.getTextWidth(failText) + 6;
   
   doc.setFillColor(...GOOD_COLOR);
-  doc.roundedRect(120, yPos - 5, passWidth, 8, 2, 2, 'F');
+  doc.roundedRect(150, yPos - 5, passWidth, 8, 2, 2, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.text(passText, 123, yPos);
+  doc.text(passText, 153, yPos);
   
   doc.setFillColor(...BAD_COLOR);
-  doc.roundedRect(120, yPos + 1, failWidth, 8, 2, 2, 'F');
+  doc.roundedRect(150, yPos + 2, failWidth, 8, 2, 2, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.text(failText, 123, yPos + 6);
+  doc.text(failText, 153, yPos + 7);
   doc.setTextColor(...palette.text);
 
-  yPos += 18;
+  yPos += 20;
 
   type PreparedCard = {
     test: NormalizedMotTest;
@@ -1188,30 +1190,31 @@ const renderMotHistory = (
     // Add "Clean pass" message if no advisories or failures
     const hasNoIssues = !advisoryBlocks.length && !failureBlocks.length;
 
-    const detailHeight = detailLines.reduce((sum, line) => sum + line.height + 2, 0);
+    const detailHeight = detailLines.reduce((sum, line) => sum + line.height, 0);
     const advisoryHeight = advisoryBlocks.length
       ? 8 + advisoryBlocks.reduce((sum, block) => sum + block.length * 4 + 2, 0)
       : 0;
     const failureHeight = failureBlocks.length
       ? 8 + failureBlocks.reduce((sum, block) => sum + block.length * 4 + 2, 0)
       : 0;
-    const cleanPassHeight = hasNoIssues ? 10 : 0;
+    const cleanPassHeight = hasNoIssues ? 12 : 0;
 
-    const cardHeight = 20 + detailHeight + advisoryHeight + failureHeight + cleanPassHeight + 8;
+    const cardHeight = 24 + detailHeight + advisoryHeight + failureHeight + cleanPassHeight;
 
     return { test, index, detailLines, advisoryBlocks, failureBlocks, cardHeight, hasNoIssues };
   });
 
   preparedCards.forEach((card) => {
-    yPos = ensurePageSpace(doc, yPos, card.cardHeight + 10);
+    const totalCardSpace = card.cardHeight + 16;
+    yPos = ensurePageSpace(doc, yPos, totalCardSpace);
     const cardTop = yPos;
 
     doc.setFillColor(248, 249, 255);
     doc.setDrawColor(225, 229, 244);
-    doc.roundedRect(20, cardTop - 4, 170, card.cardHeight + 8, 4, 4, 'F');
-    doc.roundedRect(20, cardTop - 4, 170, card.cardHeight + 8, 4, 4);
+    doc.roundedRect(20, cardTop, 170, card.cardHeight + 8, 4, 4, 'F');
+    doc.roundedRect(20, cardTop, 170, card.cardHeight + 8, 4, 4);
 
-    let innerY = cardTop + 4;
+    let innerY = cardTop + 6;
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
@@ -1220,10 +1223,10 @@ const renderMotHistory = (
 
     const badgeColor = card.test.passed ? GOOD_COLOR : BAD_COLOR;
     doc.setFillColor(...badgeColor);
-    doc.roundedRect(155, innerY - 6, 30, 10, 3, 3, 'F');
+    doc.roundedRect(155, innerY - 4, 30, 10, 3, 3, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(9.5);
-    doc.text(card.test.resultLabel, 170, innerY, { align: 'center' });
+    doc.text(card.test.resultLabel, 170, innerY + 2, { align: 'center' });
 
     innerY += 10;
     doc.setTextColor(...palette.text);
@@ -1280,11 +1283,11 @@ const renderMotHistory = (
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(...GOOD_COLOR);
-      doc.text('✓ No defects or advisories recorded', 30, innerY + 3);
+      doc.text('No defects or advisories recorded', 30, innerY + 3);
       innerY += 10;
     }
 
-    yPos = Math.max(innerY + 8, cardTop + card.cardHeight + 6);
+    yPos = innerY + 12;
   });
 
   yPos = renderMileageSummary(doc, motTests, yPos, palette.primary);
