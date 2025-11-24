@@ -855,19 +855,34 @@ const renderMileageSummary = (
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(60, 60, 60);
   mileageRecords.forEach((record, idx) => {
+    yPos = ensurePageSpace(doc, yPos, 12);
+    
+    // Date and mileage line
+    doc.text(`${record.dateLabel} • ${record.mileageLabel}`, 30, yPos);
+    yPos += 5;
+    
+    // Change since last record in a box
     const change =
       idx === 0 || record.mileage === null || mileageRecords[idx - 1].mileage === null
-        ? DASH
+        ? '—'
         : `+${(record.mileage - (mileageRecords[idx - 1].mileage ?? 0)).toLocaleString('en-GB')} miles`;
-    const lines = [
-      `${record.dateLabel} • ${record.mileageLabel}`,
-      `Change since last record: ${change}`
-    ];
-    lines.forEach((line, lineIdx) => {
-      doc.text(line, 30, yPos + lineIdx * 4);
-    });
-    yPos += lines.length * 4 + 2;
-    yPos = ensurePageSpace(doc, yPos, 12);
+    
+    const changeText = `Change since last record: ${change}`;
+    const textWidth = doc.getTextWidth(changeText);
+    const boxPadding = 2;
+    const boxHeight = 6;
+    
+    // Draw the box
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.rect(30, yPos - 3.5, textWidth + boxPadding * 2, boxHeight);
+    
+    // Draw the text inside the box
+    doc.setFontSize(9);
+    doc.text(changeText, 30 + boxPadding, yPos);
+    doc.setFontSize(10);
+    
+    yPos += 6;
   });
 
   return yPos + 4;
@@ -1028,7 +1043,8 @@ const renderMotHistory = (
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...palette.gray);
       items.forEach((text) => {
-        const lines = doc.splitTextToSize(text, 155);
+        const bulletText = `• ${text}`;
+        const lines = doc.splitTextToSize(bulletText, 150);
         doc.text(lines, 30, yPos);
         yPos += lines.length * 4;
       });
