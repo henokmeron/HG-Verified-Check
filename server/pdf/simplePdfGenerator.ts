@@ -482,9 +482,21 @@ const renderKeyValueGrid = (
       const valueY = yPos + metric.labelLines.length * 4.5 + 2;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(11);
-      doc.setTextColor(...(metric.valueColor ?? MUTED_TEXT));
-      doc.text(metric.valueLines, x, valueY, { maxWidth: columnWidth });
-      doc.setTextColor(0, 0, 0);
+      
+      // If this is a critical status field, draw a colored box with white text
+      if (metric.valueColor) {
+        const valueTextWidth = doc.getTextWidth(entry.value) + 6;
+        const boxHeight = 7;
+        doc.setFillColor(...metric.valueColor);
+        doc.roundedRect(x, valueY - 5, valueTextWidth, boxHeight, 2, 2, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.text(metric.valueLines, x + 3, valueY, { maxWidth: columnWidth });
+        doc.setTextColor(0, 0, 0);
+      } else {
+        doc.setTextColor(...MUTED_TEXT);
+        doc.text(metric.valueLines, x, valueY, { maxWidth: columnWidth });
+        doc.setTextColor(0, 0, 0);
+      }
     });
 
     yPos += rowHeight + 4;
@@ -896,7 +908,7 @@ const renderMileageSummary = (
 
   yPos = renderKeyValueGrid(doc, summaryEntries, yPos, { startX: 25, columnWidth: 80, columnGap: 20 });
 
-  yPos = ensurePageSpace(doc, yPos, 12);
+  yPos = ensurePageSpace(doc, yPos, 100);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...primaryColor);
@@ -959,7 +971,7 @@ const renderMileageSummary = (
     doc.text(lastYear.toString(), chartStartX + chartWidth, chartStartY + 6, { align: 'center' });
   }
 
-  yPos += chartHeight + 10;
+  yPos += chartHeight + 16;
 
   // Mileage table
   doc.setFont('helvetica', 'bold');
@@ -1113,9 +1125,9 @@ const renderMotHistory = (
   const failCount = nonRetest.length - passCount;
   const passRate = nonRetest.length ? Math.round((passCount / nonRetest.length) * 100) : 0;
 
-  yPos = ensurePageSpace(doc, yPos, 18);
+  yPos = ensurePageSpace(doc, yPos, 22);
   doc.setFillColor(245, 247, 255);
-  doc.roundedRect(20, yPos - 10, 170, 18, 3, 3, 'F');
+  doc.roundedRect(20, yPos - 10, 170, 22, 3, 3, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...palette.primary);
@@ -1124,13 +1136,26 @@ const renderMotHistory = (
   doc.setFontSize(10);
   doc.setTextColor(...palette.text);
   doc.text(`Based on ${nonRetest.length} tests (excluding retests)`, 25, yPos + 6);
-  doc.setTextColor(...GOOD_COLOR);
-  doc.text(`Passed: ${passCount}`, 120, yPos);
-  doc.setTextColor(...BAD_COLOR);
-  doc.text(`Failed: ${failCount}`, 120, yPos + 6);
+  
+  // Draw colored boxes for Passed and Failed counts
+  const passText = `Passed: ${passCount}`;
+  const failText = `Failed: ${failCount}`;
+  const passWidth = doc.getTextWidth(passText) + 6;
+  const failWidth = doc.getTextWidth(failText) + 6;
+  
+  doc.setFillColor(...GOOD_COLOR);
+  doc.roundedRect(120, yPos - 5, passWidth, 8, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.text(passText, 123, yPos);
+  
+  doc.setFillColor(...BAD_COLOR);
+  doc.roundedRect(120, yPos + 1, failWidth, 8, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.text(failText, 123, yPos + 6);
   doc.setTextColor(...palette.text);
 
-  yPos += 15;
+  yPos += 18;
 
   type PreparedCard = {
     test: NormalizedMotTest;
@@ -1139,6 +1164,7 @@ const renderMotHistory = (
     advisoryBlocks: string[][];
     failureBlocks: string[][];
     cardHeight: number;
+    hasNoIssues: boolean;
   };
 
   const preparedCards: PreparedCard[] = motTests.map((test, index) => {
@@ -1158,6 +1184,9 @@ const renderMotHistory = (
 
     const advisoryBlocks = test.advisories.map((text) => doc.splitTextToSize(`• ${text}`, 150));
     const failureBlocks = test.failures.map((text) => doc.splitTextToSize(`• ${text}`, 150));
+    
+    // Add "Clean pass" message if no advisories or failures
+    const hasNoIssues = !advisoryBlocks.length && !failureBlocks.length;
 
     const detailHeight = detailLines.reduce((sum, line) => sum + line.height + 2, 0);
     const advisoryHeight = advisoryBlocks.length
@@ -1166,14 +1195,15 @@ const renderMotHistory = (
     const failureHeight = failureBlocks.length
       ? 8 + failureBlocks.reduce((sum, block) => sum + block.length * 4 + 2, 0)
       : 0;
+    const cleanPassHeight = hasNoIssues ? 10 : 0;
 
-    const cardHeight = 20 + detailHeight + advisoryHeight + failureHeight + 8;
+    const cardHeight = 20 + detailHeight + advisoryHeight + failureHeight + cleanPassHeight + 8;
 
-    return { test, index, detailLines, advisoryBlocks, failureBlocks, cardHeight };
+    return { test, index, detailLines, advisoryBlocks, failureBlocks, cardHeight, hasNoIssues };
   });
 
   preparedCards.forEach((card) => {
-    yPos = ensurePageSpace(doc, yPos, card.cardHeight + 6);
+    yPos = ensurePageSpace(doc, yPos, card.cardHeight + 10);
     const cardTop = yPos;
 
     doc.setFillColor(248, 249, 255);
@@ -1241,8 +1271,20 @@ const renderMotHistory = (
         innerY += block.length * 4 + 1;
       });
     }
+    
+    // Show "Clean pass" message if no advisories or failures
+    if (card.hasNoIssues) {
+      innerY = ensurePageSpace(doc, innerY, 8);
+      doc.setFillColor(220, 252, 231);
+      doc.roundedRect(26, innerY - 3, 140, 10, 2, 2, 'F');
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...GOOD_COLOR);
+      doc.text('✓ No defects or advisories recorded', 30, innerY + 3);
+      innerY += 10;
+    }
 
-    yPos = Math.max(innerY + 6, cardTop + card.cardHeight + 4);
+    yPos = Math.max(innerY + 8, cardTop + card.cardHeight + 6);
   });
 
   yPos = renderMileageSummary(doc, motTests, yPos, palette.primary);
